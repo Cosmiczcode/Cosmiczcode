@@ -32,8 +32,12 @@ game.ServerStorage.SimUI_GrantReward.Event:Connect(function(player, reward)
     -- reward.Type == "Product" (reward.Key), "Levels", "Stat" or "Custom"
 end)
 ```
-Client buttons without a window (My Base, Upgrades, Pass, Rebirth) fire
-`PlayerGui.SimulatorUI.ButtonClicked` with the button name.
+- **My Base** teleports to the player's base (see `Config.Base` – set `Config.Base.Find` if it isn't found).
+- **Upgrades / Pass / Rebirth** open their own windows (`Config.Upgrades`, `Config.GamePasses`, `Config.Rebirth`).
+- The game's old HUD (any ScreenGui from StarterGui) is hidden automatically; Output lists what was hidden.
+  Add names to `Config.KeepGuis` to keep one, or delete the old ScreenGui from StarterGui.
+
+Every HUD button also fires `PlayerGui.SimulatorUI.ButtonClicked` with the button name.
 
 If your game already sets `MarketplaceService.ProcessReceipt`, set `Config.HandleReceipts = false`.
 

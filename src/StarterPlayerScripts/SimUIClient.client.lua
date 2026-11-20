@@ -5,9 +5,9 @@
 	Layout is drawn on a 1835 x 1032 reference canvas and scaled to fit
 	every screen size, so it looks the same on PC, tablet and phone.
 
-	Buttons without a built-in window (My Base, Upgrades, Pass, Rebirth)
-	fire PlayerGui.SimulatorUI.ButtonClicked (BindableEvent) with the
-	button name, so you can hook them up from your own LocalScripts:
+	Every HUD button also fires PlayerGui.SimulatorUI.ButtonClicked
+	(BindableEvent) with the button name, so you can hook in extra
+	behaviour from your own LocalScripts:
 
 		local gui = player.PlayerGui:WaitForChild("SimulatorUI")
 		gui.ButtonClicked.Event:Connect(function(name) print(name) end)
@@ -21,6 +21,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local player = Players.LocalPlayer
 local Config = require(ReplicatedStorage:WaitForChild("SimUIConfig"))
 local Remotes = ReplicatedStorage:WaitForChild("SimUIRemotes")
+local S = Config.Stats
 
 ---------------------------------------------------------------------
 -- Constants
@@ -355,6 +356,39 @@ local gui = create("ScreenGui", {
 })
 local buttonClicked = create("BindableEvent", { Name = "ButtonClicked", Parent = gui })
 
+-- Hide the game's old HUD so the two UIs don't overlap
+if Config.HideOldGuis then
+	local StarterGui = game:GetService("StarterGui")
+	local keep, extra = {}, {}
+	for _, n in ipairs(Config.KeepGuis or {}) do
+		keep[n] = true
+	end
+	for _, n in ipairs(Config.ExtraGuisToHide or {}) do
+		extra[n] = true
+	end
+	local function isOld(g)
+		if not g:IsA("ScreenGui") or g == gui or keep[g.Name] then
+			return false
+		end
+		return extra[g.Name] or StarterGui:FindFirstChild(g.Name) ~= nil
+	end
+	local function hide(g)
+		if isOld(g) then
+			g.Enabled = false
+			g:GetPropertyChangedSignal("Enabled"):Connect(function()
+				if g.Enabled then
+					g.Enabled = false
+				end
+			end)
+			print("[SimUI] Hid old UI:", g.Name, "- add it to Config.KeepGuis to keep it")
+		end
+	end
+	for _, g in ipairs(playerGui:GetChildren()) do
+		hide(g)
+	end
+	playerGui.ChildAdded:Connect(hide)
+end
+
 local root = create("Frame", {
 	Name = "Root",
 	BackgroundTransparency = 1,
@@ -408,12 +442,17 @@ end
 
 local function clicked(name)
 	return function()
-		if windows[name] then
+		if name == "MyBase" then
+			closeWindow()
+			Remotes:WaitForChild("GoToBase"):FireServer()
+		elseif windows[name] then
 			openWindow(name)
 		end
 		buttonClicked:Fire(name)
 	end
 end
+
+local applyData -- assigned near the bottom
 
 -- Window shell: header bar with icon, title, close X, and a dark body
 local function makeWindow(name, h, v, x, y, w, hgt, headTop, headBottom, iconKey, title)
@@ -1040,14 +1079,199 @@ do
 end
 
 ---------------------------------------------------------------------
+-- Shared row builder for list windows (Upgrades, Passes)
+---------------------------------------------------------------------
+local function listScroll(win)
+	local scroll = create("ScrollingFrame", {
+		Name = "Content",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(18, 128),
+		Size = UDim2.fromOffset(890, 485),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 8,
+		ScrollBarImageColor3 = rgb(200, 200, 200),
+		Parent = win,
+	})
+	create("UIListLayout", { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
+	create("UIPadding", {
+		PaddingLeft = UDim.new(0, 6),
+		PaddingTop = UDim.new(0, 6),
+		PaddingBottom = UDim.new(0, 6),
+		Parent = scroll,
+	})
+	return scroll
+end
+
+local function listRow(scroll, order, name, description, emoji, image, top, bottom)
+	local row = fancy("Frame", { Name = name, Size = UDim2.fromOffset(864, 120), LayoutOrder = order, Parent = scroll },
+		rgb(75, 85, 100), rgb(35, 40, 50), { NoShine = true, RimTransparency = 0.7 })
+	local box = fancy("Frame", merge(rect(12, 12, 96, 96), { Parent = row }), top, bottom, { Stroke = 3 })
+	icon(nil, merge(rect(10, 8, 76, 80), { Parent = box }), emoji, image)
+	text(name, merge(rect(124, 8, 460, 48), { TextXAlignment = Enum.TextXAlignment.Left, Parent = row }), 4)
+	text(description or "", merge(rect(124, 56, 460, 32), {
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = rgb(215, 215, 215),
+		Parent = row,
+	}), 3)
+	local sub = text("", merge(rect(124, 88, 460, 26), {
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = rgb(255, 205, 40),
+		Parent = row,
+	}), 3)
+	local btn = fancy("TextButton", merge(rect(618, 24, 228, 72), { Name = "Buy", Parent = row }),
+		rgb(170, 255, 90), rgb(50, 190, 30))
+	local btnText = text("", merge(rect(12, 8, 204, 56), { Parent = btn }), 4)
+	return row, sub, btn, btnText
+end
+
+local GREEN = { rgb(170, 255, 90), rgb(50, 190, 30) }
+local GRAY = { rgb(220, 220, 220), rgb(130, 130, 130) }
+
+local function flash(label, msg, restore)
+	label.Text = msg
+	task.delay(1.2, restore)
+end
+
+---------------------------------------------------------------------
+-- UPGRADES WINDOW
+---------------------------------------------------------------------
+local refreshUpgrades
+do
+	local win = makeWindow("Upgrades", "C", "C", 456, 203, 922, 625, rgb(190, 255, 90), rgb(60, 185, 30),
+		"Upgrade", "Upgrades")
+	local scroll = listScroll(win)
+	local rows = {}
+	local levels = {}
+
+	refreshUpgrades = function(data)
+		if data and data.Upgrades then
+			levels = data.Upgrades
+		end
+		for _, up in ipairs(Config.Upgrades) do
+			local r = rows[up.Id]
+			local lv = levels[up.Id] or 0
+			r.Sub.Text = "Level " .. lv .. " / " .. up.MaxLevel
+			if lv >= up.MaxLevel then
+				r.Text.Text = "MAX"
+				setGradient(r.Button, GRAY[1], GRAY[2])
+			else
+				r.Text.Text = "$" .. formatNumber(Config.UpgradeCost(up, lv))
+				setGradient(r.Button, GREEN[1], GREEN[2])
+			end
+		end
+	end
+
+	for i, up in ipairs(Config.Upgrades) do
+		local _, sub, btn, btnText = listRow(scroll, i, up.Name, up.Description, up.Emoji, up.Image,
+			rgb(190, 255, 90), rgb(60, 185, 30))
+		rows[up.Id] = { Sub = sub, Button = btn, Text = btnText }
+		bind(btn, function()
+			local data, err = Remotes:WaitForChild("BuyUpgrade"):InvokeServer(up.Id)
+			if data then
+				applyData(data)
+			end
+			if err then
+				flash(btnText, err, function()
+					refreshUpgrades()
+				end)
+			end
+		end)
+	end
+	refreshUpgrades()
+end
+
+---------------------------------------------------------------------
+-- PASSES WINDOW
+---------------------------------------------------------------------
+local refreshPasses
+do
+	local win = makeWindow("Pass", "C", "C", 456, 203, 922, 625, rgb(255, 235, 90), rgb(255, 160, 20), "Pass", "Passes")
+	local scroll = listScroll(win)
+	local ordered = {}
+	for key, cfg in pairs(Config.GamePasses) do
+		table.insert(ordered, { Key = key, Cfg = cfg })
+	end
+	table.sort(ordered, function(a, b)
+		return (a.Cfg.Order or 99) < (b.Cfg.Order or 99)
+	end)
+
+	local rows = {}
+	for i, entry in ipairs(ordered) do
+		local cfg = entry.Cfg
+		local _, sub, btn, btnText = listRow(scroll, i, cfg.Name or entry.Key, cfg.Description, cfg.Emoji, cfg.Image,
+			rgb(255, 235, 90), rgb(255, 160, 20))
+		btnText.Visible = false
+		local price = robuxPrice(btn, cfg.Price, rect(20, 12, 188, 48))
+		sub.Text = "Game Pass"
+		rows[entry.Key] = { Button = btn, Text = btnText, Price = price, Cfg = cfg }
+		bind(btn, function()
+			if not player:GetAttribute(cfg.Attribute) then
+				promptPass(cfg.GamePassId)
+			end
+		end)
+	end
+
+	refreshPasses = function()
+		for _, r in pairs(rows) do
+			local owned = player:GetAttribute(r.Cfg.Attribute) == true
+			r.Price.Visible = not owned
+			r.Text.Visible = owned
+			r.Text.Text = "OWNED"
+			local style = owned and GRAY or GREEN
+			setGradient(r.Button, style[1], style[2])
+		end
+	end
+	refreshPasses()
+end
+
+---------------------------------------------------------------------
+-- REBIRTH WINDOW
+---------------------------------------------------------------------
+local refreshRebirth
+do
+	local win = makeWindow("Rebirth", "C", "C", 567, 253, 700, 520, rgb(225, 110, 255), rgb(130, 35, 230),
+		"Rebirth", "Rebirth")
+	local countText = text("", merge(rect(40, 135, 620, 60), { Parent = win }), 4)
+	local costText = text("", merge(rect(40, 205, 620, 56), { TextColor3 = rgb(110, 255, 70), Parent = win }), 4)
+	text(Config.Rebirth.RewardText, merge(rect(40, 272, 620, 44), { TextColor3 = rgb(255, 205, 40), Parent = win }), 3)
+	text(Config.Rebirth.WarningText, merge(rect(40, 322, 620, 38), { TextColor3 = rgb(255, 90, 100), Parent = win }), 3)
+
+	local btn = fancy("TextButton", merge(rect(200, 395, 300, 90), { Name = "DoRebirth", Parent = win }),
+		rgb(225, 110, 255), rgb(130, 35, 230))
+	local btnText = text("REBIRTH", merge(rect(14, 10, 272, 70), { Parent = btn }), 4)
+	bind(btn, function()
+		local ok, err = Remotes:WaitForChild("Rebirth"):InvokeServer()
+		if ok then
+			flash(btnText, "REBIRTHED!", function()
+				btnText.Text = "REBIRTH"
+			end)
+		elseif err then
+			flash(btnText, err, function()
+				btnText.Text = "REBIRTH"
+			end)
+		end
+	end)
+
+	refreshRebirth = function()
+		local r = getStat(S.Rebirths) or 0
+		countText.Text = "Rebirths: " .. formatNumber(r)
+		costText.Text = "Cost: $" .. formatNumber(Config.RebirthCost(r))
+	end
+	refreshRebirth()
+end
+
+---------------------------------------------------------------------
 -- Data from server
 ---------------------------------------------------------------------
-local function applyData(data)
+applyData = function(data)
 	if not data then
 		return
 	end
 	refreshDaily(data)
 	refreshIndex(data.Discovered or {})
+	refreshUpgrades(data)
 end
 
 Remotes.DataUpdated.OnClientEvent:Connect(applyData)
@@ -1063,7 +1287,6 @@ end)
 ---------------------------------------------------------------------
 -- Live HUD values
 ---------------------------------------------------------------------
-local S = Config.Stats
 task.spawn(function()
 	while gui.Parent do
 		rebirthText.Text = formatNumber(getStat(S.Rebirths) or 0)
@@ -1082,6 +1305,8 @@ task.spawn(function()
 			local v = getStat(S[statKey])
 			info.Label.Text = v and ("X" .. tostring(v)) or info.Default
 		end
+		refreshRebirth()
+		refreshPasses()
 		task.wait(0.25)
 	end
 end)

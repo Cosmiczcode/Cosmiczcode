@@ -26,6 +26,7 @@ Config.Icons = {
 	Clover = "",
 	Shovel = "",
 	Verified = "",
+	Upgrade = "",
 	Robux = "rbxasset://textures/ui/common/robux.png",
 }
 
@@ -42,6 +43,7 @@ Config.Emoji = {
 	Clover = "🍀",
 	Shovel = "🪏",
 	Verified = "✅",
+	Upgrade = "⏫",
 	Robux = "R$",
 }
 
@@ -160,11 +162,83 @@ Config.Shop = {
 	},
 }
 
--- Right side HUD buttons (Game Pass IDs)
+-- Game passes: used by the right side X2 buttons and the "Pass" window.
+-- Owning one sets the Player attribute named in Attribute to true.
 Config.GamePasses = {
-	X2Money = { GamePassId = 0, Price = 9, Attribute = "X2Money" },
-	X2Luck = { GamePassId = 0, Price = 9, Attribute = "X2Luck" },
+	X2Money = {
+		Order = 1, GamePassId = 0, Price = 9, Attribute = "X2Money",
+		Name = "X2 Money", Description = "Double all money you earn", Emoji = "💵",
+	},
+	X2Luck = {
+		Order = 2, GamePassId = 0, Price = 9, Attribute = "X2Luck",
+		Name = "X2 Luck", Description = "Double your luck on every roll", Emoji = "🍀",
+	},
 }
+
+---------------------------------------------------------------------
+-- Old UI
+-- Any ScreenGui that comes from StarterGui is hidden when the new UI
+-- loads (popups your scripts create later are left alone). The Output
+-- window prints every UI it hides; add a name to KeepGuis to keep it.
+---------------------------------------------------------------------
+Config.HideOldGuis = true
+Config.KeepGuis = { "TouchGui", "Freecam", "BubbleChat", "Chat" }
+Config.ExtraGuisToHide = {} -- names of old ScreenGuis made by scripts
+
+---------------------------------------------------------------------
+-- My Base button
+-- Looks in these Workspace folders for a base owned by the player.
+-- A base counts as theirs when it has an attribute or Value child
+-- named one of OwnerNames holding the Player, UserId or Name, or when
+-- the base itself is named after the player.
+---------------------------------------------------------------------
+Config.Base = {
+	FolderNames = { "Bases", "Plots", "Tycoons", "Tycoon", "Base", "Plot", "Houses" },
+	OwnerNames = { "Owner", "OwnerId", "OwnerUserId", "OwnerName", "Player", "PlayerName" },
+	TeleportPartNames = { "Spawn", "SpawnPoint", "SpawnLocation", "Teleport", "TeleportPart", "TP", "Floor", "Base" },
+	Offset = Vector3.new(0, 4, 0),
+	-- Or write your own (server side): return a CFrame, BasePart or Model
+	Find = nil, -- function(player) return workspace.Bases[...] end
+}
+
+---------------------------------------------------------------------
+-- Upgrades window. Bought with the Currency stat and saved.
+-- Each sets Player attributes "Upgrade_<Id>" (level) and
+-- "<Id>Bonus" (level * PerLevel) for your own scripts to read.
+-- Effect "WalkSpeed" / "JumpPower" is applied automatically.
+---------------------------------------------------------------------
+Config.Upgrades = {
+	{ Id = "WalkSpeed", Name = "Walk Speed", Description = "+2 speed per level", Emoji = "👟",
+		MaxLevel = 10, BaseCost = 500, CostGrowth = 1.6, PerLevel = 2, Effect = "WalkSpeed" },
+	{ Id = "CashMulti", Name = "Cash Multiplier", Description = "+10% money per level", Emoji = "💵",
+		MaxLevel = 20, BaseCost = 1000, CostGrowth = 1.5, PerLevel = 0.1 },
+	{ Id = "Luck", Name = "Luck", Description = "+5% luck per level", Emoji = "🍀",
+		MaxLevel = 10, BaseCost = 2500, CostGrowth = 1.7, PerLevel = 0.05 },
+	{ Id = "JumpPower", Name = "Jump Power", Description = "+5 jump per level", Emoji = "🦘",
+		MaxLevel = 10, BaseCost = 750, CostGrowth = 1.6, PerLevel = 5, Effect = "JumpPower" },
+}
+
+function Config.UpgradeCost(upgrade, level)
+	return math.floor(upgrade.BaseCost * upgrade.CostGrowth ^ level)
+end
+
+---------------------------------------------------------------------
+-- Rebirth window. Set Enabled = false if your game already has its
+-- own rebirth system (the button then only fires SimUI_GrantReward
+-- with { Type = "RebirthRequest" }).
+---------------------------------------------------------------------
+Config.Rebirth = {
+	Enabled = true,
+	BaseCost = 1000000,
+	CostGrowth = 2.5,
+	ResetStats = { "Cash" }, -- set to 0 on rebirth
+	RewardText = "Reward: +1 Rebirth (bigger multiplier!)",
+	WarningText = "Resets your Cash",
+}
+
+function Config.RebirthCost(rebirths)
+	return math.floor(Config.Rebirth.BaseCost * Config.Rebirth.CostGrowth ^ rebirths)
+end
 
 -- Bottom "+5 / +10 / +25 Levels" buttons (Developer Product IDs)
 Config.LevelProducts = {
@@ -185,9 +259,9 @@ return Config
 	Layout is drawn on a 1835 x 1032 reference canvas and scaled to fit
 	every screen size, so it looks the same on PC, tablet and phone.
 
-	Buttons without a built-in window (My Base, Upgrades, Pass, Rebirth)
-	fire PlayerGui.SimulatorUI.ButtonClicked (BindableEvent) with the
-	button name, so you can hook them up from your own LocalScripts:
+	Every HUD button also fires PlayerGui.SimulatorUI.ButtonClicked
+	(BindableEvent) with the button name, so you can hook in extra
+	behaviour from your own LocalScripts:
 
 		local gui = player.PlayerGui:WaitForChild("SimulatorUI")
 		gui.ButtonClicked.Event:Connect(function(name) print(name) end)
@@ -201,6 +275,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local player = Players.LocalPlayer
 local Config = require(ReplicatedStorage:WaitForChild("SimUIConfig"))
 local Remotes = ReplicatedStorage:WaitForChild("SimUIRemotes")
+local S = Config.Stats
 
 ---------------------------------------------------------------------
 -- Constants
@@ -535,6 +610,39 @@ local gui = create("ScreenGui", {
 })
 local buttonClicked = create("BindableEvent", { Name = "ButtonClicked", Parent = gui })
 
+-- Hide the game's old HUD so the two UIs don't overlap
+if Config.HideOldGuis then
+	local StarterGui = game:GetService("StarterGui")
+	local keep, extra = {}, {}
+	for _, n in ipairs(Config.KeepGuis or {}) do
+		keep[n] = true
+	end
+	for _, n in ipairs(Config.ExtraGuisToHide or {}) do
+		extra[n] = true
+	end
+	local function isOld(g)
+		if not g:IsA("ScreenGui") or g == gui or keep[g.Name] then
+			return false
+		end
+		return extra[g.Name] or StarterGui:FindFirstChild(g.Name) ~= nil
+	end
+	local function hide(g)
+		if isOld(g) then
+			g.Enabled = false
+			g:GetPropertyChangedSignal("Enabled"):Connect(function()
+				if g.Enabled then
+					g.Enabled = false
+				end
+			end)
+			print("[SimUI] Hid old UI:", g.Name, "- add it to Config.KeepGuis to keep it")
+		end
+	end
+	for _, g in ipairs(playerGui:GetChildren()) do
+		hide(g)
+	end
+	playerGui.ChildAdded:Connect(hide)
+end
+
 local root = create("Frame", {
 	Name = "Root",
 	BackgroundTransparency = 1,
@@ -588,12 +696,17 @@ end
 
 local function clicked(name)
 	return function()
-		if windows[name] then
+		if name == "MyBase" then
+			closeWindow()
+			Remotes:WaitForChild("GoToBase"):FireServer()
+		elseif windows[name] then
 			openWindow(name)
 		end
 		buttonClicked:Fire(name)
 	end
 end
+
+local applyData -- assigned near the bottom
 
 -- Window shell: header bar with icon, title, close X, and a dark body
 local function makeWindow(name, h, v, x, y, w, hgt, headTop, headBottom, iconKey, title)
@@ -1220,14 +1333,199 @@ do
 end
 
 ---------------------------------------------------------------------
+-- Shared row builder for list windows (Upgrades, Passes)
+---------------------------------------------------------------------
+local function listScroll(win)
+	local scroll = create("ScrollingFrame", {
+		Name = "Content",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(18, 128),
+		Size = UDim2.fromOffset(890, 485),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 8,
+		ScrollBarImageColor3 = rgb(200, 200, 200),
+		Parent = win,
+	})
+	create("UIListLayout", { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
+	create("UIPadding", {
+		PaddingLeft = UDim.new(0, 6),
+		PaddingTop = UDim.new(0, 6),
+		PaddingBottom = UDim.new(0, 6),
+		Parent = scroll,
+	})
+	return scroll
+end
+
+local function listRow(scroll, order, name, description, emoji, image, top, bottom)
+	local row = fancy("Frame", { Name = name, Size = UDim2.fromOffset(864, 120), LayoutOrder = order, Parent = scroll },
+		rgb(75, 85, 100), rgb(35, 40, 50), { NoShine = true, RimTransparency = 0.7 })
+	local box = fancy("Frame", merge(rect(12, 12, 96, 96), { Parent = row }), top, bottom, { Stroke = 3 })
+	icon(nil, merge(rect(10, 8, 76, 80), { Parent = box }), emoji, image)
+	text(name, merge(rect(124, 8, 460, 48), { TextXAlignment = Enum.TextXAlignment.Left, Parent = row }), 4)
+	text(description or "", merge(rect(124, 56, 460, 32), {
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = rgb(215, 215, 215),
+		Parent = row,
+	}), 3)
+	local sub = text("", merge(rect(124, 88, 460, 26), {
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = rgb(255, 205, 40),
+		Parent = row,
+	}), 3)
+	local btn = fancy("TextButton", merge(rect(618, 24, 228, 72), { Name = "Buy", Parent = row }),
+		rgb(170, 255, 90), rgb(50, 190, 30))
+	local btnText = text("", merge(rect(12, 8, 204, 56), { Parent = btn }), 4)
+	return row, sub, btn, btnText
+end
+
+local GREEN = { rgb(170, 255, 90), rgb(50, 190, 30) }
+local GRAY = { rgb(220, 220, 220), rgb(130, 130, 130) }
+
+local function flash(label, msg, restore)
+	label.Text = msg
+	task.delay(1.2, restore)
+end
+
+---------------------------------------------------------------------
+-- UPGRADES WINDOW
+---------------------------------------------------------------------
+local refreshUpgrades
+do
+	local win = makeWindow("Upgrades", "C", "C", 456, 203, 922, 625, rgb(190, 255, 90), rgb(60, 185, 30),
+		"Upgrade", "Upgrades")
+	local scroll = listScroll(win)
+	local rows = {}
+	local levels = {}
+
+	refreshUpgrades = function(data)
+		if data and data.Upgrades then
+			levels = data.Upgrades
+		end
+		for _, up in ipairs(Config.Upgrades) do
+			local r = rows[up.Id]
+			local lv = levels[up.Id] or 0
+			r.Sub.Text = "Level " .. lv .. " / " .. up.MaxLevel
+			if lv >= up.MaxLevel then
+				r.Text.Text = "MAX"
+				setGradient(r.Button, GRAY[1], GRAY[2])
+			else
+				r.Text.Text = "$" .. formatNumber(Config.UpgradeCost(up, lv))
+				setGradient(r.Button, GREEN[1], GREEN[2])
+			end
+		end
+	end
+
+	for i, up in ipairs(Config.Upgrades) do
+		local _, sub, btn, btnText = listRow(scroll, i, up.Name, up.Description, up.Emoji, up.Image,
+			rgb(190, 255, 90), rgb(60, 185, 30))
+		rows[up.Id] = { Sub = sub, Button = btn, Text = btnText }
+		bind(btn, function()
+			local data, err = Remotes:WaitForChild("BuyUpgrade"):InvokeServer(up.Id)
+			if data then
+				applyData(data)
+			end
+			if err then
+				flash(btnText, err, function()
+					refreshUpgrades()
+				end)
+			end
+		end)
+	end
+	refreshUpgrades()
+end
+
+---------------------------------------------------------------------
+-- PASSES WINDOW
+---------------------------------------------------------------------
+local refreshPasses
+do
+	local win = makeWindow("Pass", "C", "C", 456, 203, 922, 625, rgb(255, 235, 90), rgb(255, 160, 20), "Pass", "Passes")
+	local scroll = listScroll(win)
+	local ordered = {}
+	for key, cfg in pairs(Config.GamePasses) do
+		table.insert(ordered, { Key = key, Cfg = cfg })
+	end
+	table.sort(ordered, function(a, b)
+		return (a.Cfg.Order or 99) < (b.Cfg.Order or 99)
+	end)
+
+	local rows = {}
+	for i, entry in ipairs(ordered) do
+		local cfg = entry.Cfg
+		local _, sub, btn, btnText = listRow(scroll, i, cfg.Name or entry.Key, cfg.Description, cfg.Emoji, cfg.Image,
+			rgb(255, 235, 90), rgb(255, 160, 20))
+		btnText.Visible = false
+		local price = robuxPrice(btn, cfg.Price, rect(20, 12, 188, 48))
+		sub.Text = "Game Pass"
+		rows[entry.Key] = { Button = btn, Text = btnText, Price = price, Cfg = cfg }
+		bind(btn, function()
+			if not player:GetAttribute(cfg.Attribute) then
+				promptPass(cfg.GamePassId)
+			end
+		end)
+	end
+
+	refreshPasses = function()
+		for _, r in pairs(rows) do
+			local owned = player:GetAttribute(r.Cfg.Attribute) == true
+			r.Price.Visible = not owned
+			r.Text.Visible = owned
+			r.Text.Text = "OWNED"
+			local style = owned and GRAY or GREEN
+			setGradient(r.Button, style[1], style[2])
+		end
+	end
+	refreshPasses()
+end
+
+---------------------------------------------------------------------
+-- REBIRTH WINDOW
+---------------------------------------------------------------------
+local refreshRebirth
+do
+	local win = makeWindow("Rebirth", "C", "C", 567, 253, 700, 520, rgb(225, 110, 255), rgb(130, 35, 230),
+		"Rebirth", "Rebirth")
+	local countText = text("", merge(rect(40, 135, 620, 60), { Parent = win }), 4)
+	local costText = text("", merge(rect(40, 205, 620, 56), { TextColor3 = rgb(110, 255, 70), Parent = win }), 4)
+	text(Config.Rebirth.RewardText, merge(rect(40, 272, 620, 44), { TextColor3 = rgb(255, 205, 40), Parent = win }), 3)
+	text(Config.Rebirth.WarningText, merge(rect(40, 322, 620, 38), { TextColor3 = rgb(255, 90, 100), Parent = win }), 3)
+
+	local btn = fancy("TextButton", merge(rect(200, 395, 300, 90), { Name = "DoRebirth", Parent = win }),
+		rgb(225, 110, 255), rgb(130, 35, 230))
+	local btnText = text("REBIRTH", merge(rect(14, 10, 272, 70), { Parent = btn }), 4)
+	bind(btn, function()
+		local ok, err = Remotes:WaitForChild("Rebirth"):InvokeServer()
+		if ok then
+			flash(btnText, "REBIRTHED!", function()
+				btnText.Text = "REBIRTH"
+			end)
+		elseif err then
+			flash(btnText, err, function()
+				btnText.Text = "REBIRTH"
+			end)
+		end
+	end)
+
+	refreshRebirth = function()
+		local r = getStat(S.Rebirths) or 0
+		countText.Text = "Rebirths: " .. formatNumber(r)
+		costText.Text = "Cost: $" .. formatNumber(Config.RebirthCost(r))
+	end
+	refreshRebirth()
+end
+
+---------------------------------------------------------------------
 -- Data from server
 ---------------------------------------------------------------------
-local function applyData(data)
+applyData = function(data)
 	if not data then
 		return
 	end
 	refreshDaily(data)
 	refreshIndex(data.Discovered or {})
+	refreshUpgrades(data)
 end
 
 Remotes.DataUpdated.OnClientEvent:Connect(applyData)
@@ -1243,7 +1541,6 @@ end)
 ---------------------------------------------------------------------
 -- Live HUD values
 ---------------------------------------------------------------------
-local S = Config.Stats
 task.spawn(function()
 	while gui.Parent do
 		rebirthText.Text = formatNumber(getStat(S.Rebirths) or 0)
@@ -1262,6 +1559,8 @@ task.spawn(function()
 			local v = getStat(S[statKey])
 			info.Label.Text = v and ("X" .. tostring(v)) or info.Default
 		end
+		refreshRebirth()
+		refreshPasses()
 		task.wait(0.25)
 	end
 end)
@@ -1272,6 +1571,7 @@ end)
 	- Validates and grants daily reward claims
 	- Handles Developer Product receipts for the Shop / Level buttons
 	- Sets X2Money / X2Luck attributes for game pass owners
+	- My Base teleport, Upgrades purchases and Rebirths
 
 	Hooks for your own server scripts (created in ServerStorage):
 	  SimUI_DiscoverItem  (BindableEvent)  :Fire(player, "Item Name")
@@ -1309,6 +1609,9 @@ local remotes = make("Folder", "SimUIRemotes", ReplicatedStorage)
 local GetData = make("RemoteFunction", "GetData", remotes)
 local ClaimDaily = make("RemoteFunction", "ClaimDaily", remotes)
 local DataUpdated = make("RemoteEvent", "DataUpdated", remotes)
+local GoToBase = make("RemoteEvent", "GoToBase", remotes)
+local BuyUpgrade = make("RemoteFunction", "BuyUpgrade", remotes)
+local RebirthRemote = make("RemoteFunction", "Rebirth", remotes)
 
 local DiscoverItem = make("BindableEvent", "SimUI_DiscoverItem", ServerStorage)
 local GrantReward = make("BindableEvent", "SimUI_GrantReward", ServerStorage)
@@ -1336,6 +1639,7 @@ local function defaultData()
 	return {
 		Daily = { Claimed = {}, Unlocked = 0, LastDay = -1 },
 		Discovered = {},
+		Upgrades = {},
 	}
 end
 
@@ -1398,6 +1702,7 @@ local function load(player)
 	data.Daily = data.Daily or defaultData().Daily
 	data.Daily.Claimed = data.Daily.Claimed or {}
 	data.Discovered = data.Discovered or {}
+	data.Upgrades = data.Upgrades or {}
 	tickDaily(data)
 	sessions[player] = data
 	return data
@@ -1421,6 +1726,32 @@ local function addStat(player, statName, amount)
 		v.Value += amount
 	else
 		player:SetAttribute(statName, (player:GetAttribute(statName) or 0) + amount)
+	end
+end
+
+local function findStat(player, statName)
+	local ls = player:FindFirstChild("leaderstats")
+	local v = ls and ls:FindFirstChild(statName)
+	if v and (v:IsA("IntValue") or v:IsA("NumberValue")) then
+		return v
+	end
+	return nil
+end
+
+local function getStat(player, statName)
+	local v = findStat(player, statName)
+	if v then
+		return v.Value
+	end
+	return player:GetAttribute(statName) or 0
+end
+
+local function setStat(player, statName, value)
+	local v = findStat(player, statName)
+	if v then
+		v.Value = value
+	else
+		player:SetAttribute(statName, value)
 	end
 end
 
@@ -1552,11 +1883,216 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passI
 end)
 
 ---------------------------------------------------------------------
+-- Upgrades
+---------------------------------------------------------------------
+local upgradesById = {}
+for _, up in ipairs(Config.Upgrades or {}) do
+	upgradesById[up.Id] = up
+end
+
+local function applyUpgrades(player)
+	local data = sessions[player]
+	if not data then
+		return
+	end
+	for id, up in pairs(upgradesById) do
+		local lv = data.Upgrades[id] or 0
+		player:SetAttribute("Upgrade_" .. id, lv)
+		player:SetAttribute(id .. "Bonus", lv * up.PerLevel)
+	end
+	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if hum then
+		for id, up in pairs(upgradesById) do
+			local bonus = (data.Upgrades[id] or 0) * up.PerLevel
+			if up.Effect == "WalkSpeed" then
+				hum.WalkSpeed = game:GetService("StarterPlayer").CharacterWalkSpeed + bonus
+			elseif up.Effect == "JumpPower" then
+				hum.UseJumpPower = true
+				hum.JumpPower = game:GetService("StarterPlayer").CharacterJumpPower + bonus
+			end
+		end
+	end
+end
+
+local busy = {}
+BuyUpgrade.OnServerInvoke = function(player, id)
+	local data = sessions[player]
+	local up = typeof(id) == "string" and upgradesById[id]
+	if not data or not up then
+		return data, "Error"
+	end
+	if busy[player] then
+		return data, nil
+	end
+	busy[player] = true
+	local lv = data.Upgrades[id] or 0
+	local err = nil
+	if lv >= up.MaxLevel then
+		err = "MAX"
+	else
+		local cost = Config.UpgradeCost(up, lv)
+		local cash = getStat(player, Config.Stats.Currency)
+		if cash < cost then
+			err = "Need $" .. math.ceil(cost - cash)
+		else
+			setStat(player, Config.Stats.Currency, cash - cost)
+			data.Upgrades[id] = lv + 1
+			applyUpgrades(player)
+			GrantReward:Fire(player, { Type = "Upgrade", Id = id, Level = lv + 1 })
+			task.spawn(save, player)
+		end
+	end
+	busy[player] = nil
+	return data, err
+end
+
+---------------------------------------------------------------------
+-- Rebirth
+---------------------------------------------------------------------
+RebirthRemote.OnServerInvoke = function(player)
+	if not Config.Rebirth.Enabled then
+		GrantReward:Fire(player, { Type = "RebirthRequest" })
+		return false, nil
+	end
+	if busy[player] then
+		return false, nil
+	end
+	busy[player] = true
+	local rebirths = getStat(player, Config.Stats.Rebirths)
+	local cost = Config.RebirthCost(rebirths)
+	local ok, err = false, nil
+	if getStat(player, Config.Stats.Currency) < cost then
+		err = "Need more Cash!"
+	else
+		for _, statName in ipairs(Config.Rebirth.ResetStats) do
+			setStat(player, statName, 0)
+		end
+		setStat(player, Config.Stats.Rebirths, rebirths + 1)
+		GrantReward:Fire(player, { Type = "Rebirth", Rebirths = rebirths + 1 })
+		ok = true
+	end
+	busy[player] = nil
+	return ok, err
+end
+
+---------------------------------------------------------------------
+-- My Base teleport
+---------------------------------------------------------------------
+local function ownedBy(obj, player)
+	if obj.Name == player.Name or obj.Name == player.Name .. "'s Base" or obj.Name == player.Name .. "Base" then
+		return true
+	end
+	local function matches(v)
+		return v == player or v == player.UserId or v == player.Name or v == tostring(player.UserId)
+			or v == player.DisplayName and v ~= ""
+	end
+	for _, key in ipairs(Config.Base.OwnerNames) do
+		local attr = obj:GetAttribute(key)
+		if attr ~= nil and matches(attr) then
+			return true
+		end
+		local child = obj:FindFirstChild(key)
+		if child and child:IsA("ValueBase") and matches(child.Value) then
+			return true
+		end
+	end
+	return false
+end
+
+local function findBase(player)
+	if Config.Base.Find then
+		local ok, result = pcall(Config.Base.Find, player)
+		if ok and result then
+			return result
+		end
+	end
+	for _, folderName in ipairs(Config.Base.FolderNames) do
+		local folder = workspace:FindFirstChild(folderName)
+		if folder then
+			if ownedBy(folder, player) then
+				return folder
+			end
+			for _, base in ipairs(folder:GetChildren()) do
+				if ownedBy(base, player) then
+					return base
+				end
+			end
+		end
+	end
+	-- last resort: any model in Workspace with a matching owner tag
+	for _, obj in ipairs(workspace:GetChildren()) do
+		if obj:IsA("Model") and obj ~= player.Character and not Players:GetPlayerFromCharacter(obj)
+			and ownedBy(obj, player) then
+			return obj
+		end
+	end
+	return nil
+end
+
+local function toCFrame(target)
+	if typeof(target) == "CFrame" then
+		return target
+	end
+	if typeof(target) ~= "Instance" then
+		return nil
+	end
+	for _, partName in ipairs(Config.Base.TeleportPartNames) do
+		local p = target:FindFirstChild(partName, true)
+		if p and p:IsA("BasePart") then
+			return p.CFrame
+		end
+	end
+	if target:IsA("BasePart") then
+		return target.CFrame
+	end
+	if target:IsA("Model") or target:IsA("Folder") then
+		local ok, cf = pcall(function()
+			if target:IsA("Model") then
+				return target:GetPivot()
+			end
+			local any = target:FindFirstChildWhichIsA("BasePart", true)
+			return any and any.CFrame
+		end)
+		if ok then
+			return cf
+		end
+	end
+	return nil
+end
+
+local lastTeleport = {}
+GoToBase.OnServerEvent:Connect(function(player)
+	if lastTeleport[player] and os.clock() - lastTeleport[player] < 1 then
+		return
+	end
+	lastTeleport[player] = os.clock()
+	local char = player.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") then
+		return
+	end
+	local cf = toCFrame(findBase(player))
+	if not cf then
+		-- fall back to the player's spawn
+		local spawn = player.RespawnLocation or workspace:FindFirstChildWhichIsA("SpawnLocation", true)
+		cf = spawn and spawn.CFrame
+		warn("[SimUI] Couldn't find " .. player.Name .. "'s base - set Config.Base in SimUIConfig. Sent to spawn.")
+	end
+	if cf then
+		char:PivotTo(CFrame.new(cf.Position + Config.Base.Offset))
+	end
+end)
+
+---------------------------------------------------------------------
 -- Lifecycle
 ---------------------------------------------------------------------
 local function onJoin(player)
 	local data = load(player)
 	refreshPasses(player)
+	applyUpgrades(player)
+	player.CharacterAdded:Connect(function()
+		task.wait(0.2)
+		applyUpgrades(player)
+	end)
 	DataUpdated:FireClient(player, data)
 end
 
@@ -1569,6 +2105,8 @@ Players.PlayerRemoving:Connect(function(player)
 	save(player)
 	sessions[player] = nil
 	claimDebounce[player] = nil
+	busy[player] = nil
+	lastTeleport[player] = nil
 end)
 
 game:BindToClose(function()

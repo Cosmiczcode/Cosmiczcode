@@ -26,6 +26,7 @@ Config.Icons = {
 	Clover = "",
 	Shovel = "",
 	Verified = "",
+	Upgrade = "",
 	Robux = "rbxasset://textures/ui/common/robux.png",
 }
 
@@ -42,6 +43,7 @@ Config.Emoji = {
 	Clover = "🍀",
 	Shovel = "🪏",
 	Verified = "✅",
+	Upgrade = "⏫",
 	Robux = "R$",
 }
 
@@ -160,11 +162,83 @@ Config.Shop = {
 	},
 }
 
--- Right side HUD buttons (Game Pass IDs)
+-- Game passes: used by the right side X2 buttons and the "Pass" window.
+-- Owning one sets the Player attribute named in Attribute to true.
 Config.GamePasses = {
-	X2Money = { GamePassId = 0, Price = 9, Attribute = "X2Money" },
-	X2Luck = { GamePassId = 0, Price = 9, Attribute = "X2Luck" },
+	X2Money = {
+		Order = 1, GamePassId = 0, Price = 9, Attribute = "X2Money",
+		Name = "X2 Money", Description = "Double all money you earn", Emoji = "💵",
+	},
+	X2Luck = {
+		Order = 2, GamePassId = 0, Price = 9, Attribute = "X2Luck",
+		Name = "X2 Luck", Description = "Double your luck on every roll", Emoji = "🍀",
+	},
 }
+
+---------------------------------------------------------------------
+-- Old UI
+-- Any ScreenGui that comes from StarterGui is hidden when the new UI
+-- loads (popups your scripts create later are left alone). The Output
+-- window prints every UI it hides; add a name to KeepGuis to keep it.
+---------------------------------------------------------------------
+Config.HideOldGuis = true
+Config.KeepGuis = { "TouchGui", "Freecam", "BubbleChat", "Chat" }
+Config.ExtraGuisToHide = {} -- names of old ScreenGuis made by scripts
+
+---------------------------------------------------------------------
+-- My Base button
+-- Looks in these Workspace folders for a base owned by the player.
+-- A base counts as theirs when it has an attribute or Value child
+-- named one of OwnerNames holding the Player, UserId or Name, or when
+-- the base itself is named after the player.
+---------------------------------------------------------------------
+Config.Base = {
+	FolderNames = { "Bases", "Plots", "Tycoons", "Tycoon", "Base", "Plot", "Houses" },
+	OwnerNames = { "Owner", "OwnerId", "OwnerUserId", "OwnerName", "Player", "PlayerName" },
+	TeleportPartNames = { "Spawn", "SpawnPoint", "SpawnLocation", "Teleport", "TeleportPart", "TP", "Floor", "Base" },
+	Offset = Vector3.new(0, 4, 0),
+	-- Or write your own (server side): return a CFrame, BasePart or Model
+	Find = nil, -- function(player) return workspace.Bases[...] end
+}
+
+---------------------------------------------------------------------
+-- Upgrades window. Bought with the Currency stat and saved.
+-- Each sets Player attributes "Upgrade_<Id>" (level) and
+-- "<Id>Bonus" (level * PerLevel) for your own scripts to read.
+-- Effect "WalkSpeed" / "JumpPower" is applied automatically.
+---------------------------------------------------------------------
+Config.Upgrades = {
+	{ Id = "WalkSpeed", Name = "Walk Speed", Description = "+2 speed per level", Emoji = "👟",
+		MaxLevel = 10, BaseCost = 500, CostGrowth = 1.6, PerLevel = 2, Effect = "WalkSpeed" },
+	{ Id = "CashMulti", Name = "Cash Multiplier", Description = "+10% money per level", Emoji = "💵",
+		MaxLevel = 20, BaseCost = 1000, CostGrowth = 1.5, PerLevel = 0.1 },
+	{ Id = "Luck", Name = "Luck", Description = "+5% luck per level", Emoji = "🍀",
+		MaxLevel = 10, BaseCost = 2500, CostGrowth = 1.7, PerLevel = 0.05 },
+	{ Id = "JumpPower", Name = "Jump Power", Description = "+5 jump per level", Emoji = "🦘",
+		MaxLevel = 10, BaseCost = 750, CostGrowth = 1.6, PerLevel = 5, Effect = "JumpPower" },
+}
+
+function Config.UpgradeCost(upgrade, level)
+	return math.floor(upgrade.BaseCost * upgrade.CostGrowth ^ level)
+end
+
+---------------------------------------------------------------------
+-- Rebirth window. Set Enabled = false if your game already has its
+-- own rebirth system (the button then only fires SimUI_GrantReward
+-- with { Type = "RebirthRequest" }).
+---------------------------------------------------------------------
+Config.Rebirth = {
+	Enabled = true,
+	BaseCost = 1000000,
+	CostGrowth = 2.5,
+	ResetStats = { "Cash" }, -- set to 0 on rebirth
+	RewardText = "Reward: +1 Rebirth (bigger multiplier!)",
+	WarningText = "Resets your Cash",
+}
+
+function Config.RebirthCost(rebirths)
+	return math.floor(Config.Rebirth.BaseCost * Config.Rebirth.CostGrowth ^ rebirths)
+end
 
 -- Bottom "+5 / +10 / +25 Levels" buttons (Developer Product IDs)
 Config.LevelProducts = {
