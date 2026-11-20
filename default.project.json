@@ -1,0 +1,9 @@
+{
+  "name": "SimulatorUI",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": { "SimUIConfig": { "$path": "src/ReplicatedStorage/SimUIConfig.lua" } },
+    "ServerScriptService": { "SimUIServer": { "$path": "src/ServerScriptService/SimUIServer.server.lua" } },
+    "StarterPlayer": { "StarterPlayerScripts": { "SimUIClient": { "$path": "src/StarterPlayerScripts/SimUIClient.client.lua" } } }
+  }
+}

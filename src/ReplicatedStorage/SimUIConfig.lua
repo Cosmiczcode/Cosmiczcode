@@ -1,0 +1,180 @@
+--[[
+	SimUIConfig  (ModuleScript -> ReplicatedStorage)
+
+	Everything you will want to change lives here: item lists, reward
+	days, prices, product / game pass IDs, icon images and which
+	leaderstats the HUD reads from.
+]]
+
+local Config = {}
+
+---------------------------------------------------------------------
+-- Icons
+-- Paste "rbxassetid://123456" into any of these to use your own
+-- uploaded image. While a value is "" the matching emoji is shown.
+---------------------------------------------------------------------
+Config.Icons = {
+	Crate = "",
+	MysteryBox = "",
+	Book = "",
+	Basket = "",
+	Pass = "",
+	Rebirth = "",
+	Calendar = "",
+	Gift = "",
+	Cash = "",
+	Clover = "",
+	Shovel = "",
+	Verified = "",
+	Robux = "rbxasset://textures/ui/common/robux.png",
+}
+
+Config.Emoji = {
+	Crate = "📦",
+	MysteryBox = "❓",
+	Book = "📘",
+	Basket = "🧺",
+	Pass = "🎫",
+	Rebirth = "🔄",
+	Calendar = "📅",
+	Gift = "🎁",
+	Cash = "💵",
+	Clover = "🍀",
+	Shovel = "🪏",
+	Verified = "✅",
+	Robux = "R$",
+}
+
+---------------------------------------------------------------------
+-- Stats the HUD reads. Each name is looked up in player.leaderstats
+-- first, then as an attribute on the Player.
+---------------------------------------------------------------------
+Config.Stats = {
+	Currency = "Cash",
+	Rebirths = "Rebirths",
+	Level = "Level",
+	XP = "XP",
+	XPMax = "XPMax", -- XP needed for next level (falls back to 100)
+	Multiplier = "Multiplier",
+	FriendBoost = "FriendBoost", -- percent number, e.g. 10 -> "+10%"
+	CashBoost = "CashBoost", -- bottom-right "X1.1"
+	RebirthBoost = "RebirthBoost", -- bottom-right "X1.3"
+	VerifiedBoost = "VerifiedBoost", -- bottom-right "N/A"
+}
+
+---------------------------------------------------------------------
+-- Rarities (Index category buttons, top to bottom)
+---------------------------------------------------------------------
+Config.Rarities = {
+	{ Name = "Common", Top = Color3.fromRGB(240, 240, 240), Bottom = Color3.fromRGB(140, 140, 140) },
+	{ Name = "Rare", Top = Color3.fromRGB(110, 215, 255), Bottom = Color3.fromRGB(25, 105, 235) },
+	{ Name = "Epic", Top = Color3.fromRGB(215, 100, 255), Bottom = Color3.fromRGB(115, 25, 225) },
+	{ Name = "Legendary", Top = Color3.fromRGB(255, 225, 60), Bottom = Color3.fromRGB(255, 120, 15) },
+	{ Name = "Mythical", Top = Color3.fromRGB(255, 90, 150), Bottom = Color3.fromRGB(215, 15, 45) },
+	{ Name = "Secret", Top = Color3.fromRGB(110, 110, 110), Bottom = Color3.fromRGB(20, 20, 20) },
+}
+
+---------------------------------------------------------------------
+-- Index items. Image = "rbxassetid://..." (optional), Emoji shown
+-- otherwise once the item is discovered. Undiscovered items show the
+-- yellow "?" block.
+--
+-- Mark an item discovered from any server script with:
+--   game.ServerStorage.SimUI_DiscoverItem:Fire(player, "Item Name")
+---------------------------------------------------------------------
+Config.ShowUndiscoveredNames = true -- false = show "???" instead
+
+Config.Items = {
+	-- { Name = "Wooden Sword", Rarity = "Common", Image = "", Emoji = "🗡️" },
+}
+
+-- Placeholder items so the Index is filled out like the preview.
+-- Delete this loop once you've added your real items above.
+if #Config.Items == 0 then
+	for _, rarity in ipairs(Config.Rarities) do
+		for i = 1, 12 do
+			table.insert(Config.Items, {
+				Name = rarity.Name .. " Item " .. i,
+				Rarity = rarity.Name,
+				Image = "",
+				Emoji = "⭐",
+			})
+		end
+	end
+end
+
+---------------------------------------------------------------------
+-- Daily rewards (7 days). One new day unlocks per calendar day (UTC)
+-- the player logs in. After day 7 is claimed the cycle restarts.
+--
+-- Reward.Type:
+--   "Stat"   -> adds Amount to leaderstats[Stat] (or attribute)
+--   "Custom" -> only fires ServerStorage.SimUI_GrantReward(player, reward)
+-- Every reward also fires SimUI_GrantReward so you can hook in.
+---------------------------------------------------------------------
+Config.ResetStreakOnMiss = false -- true = missing a day restarts at Day 1
+
+Config.DailyRewards = {
+	{ Name = "ITEM NAME!", Reward = { Type = "Stat", Stat = "Cash", Amount = 500 } },
+	{ Name = "ITEM NAME!", Reward = { Type = "Stat", Stat = "Cash", Amount = 1000 } },
+	{ Name = "ITEM NAME!", Reward = { Type = "Stat", Stat = "Cash", Amount = 2500 } },
+	{ Name = "ITEM NAME!", Reward = { Type = "Stat", Stat = "Cash", Amount = 5000 } },
+	{ Name = "ITEM NAME!", Reward = { Type = "Stat", Stat = "Cash", Amount = 10000 } },
+	{ Name = "ITEM NAME!", Reward = { Type = "Stat", Stat = "Cash", Amount = 25000 } },
+	{ Name = "ITEM NAME!", Reward = { Type = "Custom", Id = "Day7Crate" } },
+}
+
+---------------------------------------------------------------------
+-- Shop. ProductId = your Developer Product ID (Creator Dashboard ->
+-- your experience -> Monetization -> Developer Products).
+-- Price / OldPrice are only the numbers displayed.
+---------------------------------------------------------------------
+Config.Shop = {
+	ExclusiveCrate = {
+		Title = "Exclusive [NAME] Crate!",
+		Label = "Exclusive",
+		SubLabel = "[NAME] Crate",
+		Odds = {
+			{ Name = "Name", Chance = "65%", Color = Color3.fromRGB(255, 255, 255) },
+			{ Name = "Name", Chance = "45%", Color = Color3.fromRGB(120, 255, 90) },
+			{ Name = "Name", Chance = "15%", Color = Color3.fromRGB(255, 220, 60) },
+			{ Name = "Name", Chance = "1%", Color = Color3.fromRGB(110, 200, 255) },
+			{ Name = "Name", Chance = "0.01%", Color = Color3.fromRGB(255, 120, 230) },
+		},
+		BuyMany = { ProductId = 0, Price = 55, OldPrice = 87, Label = "3 Crates", Key = "ExclusiveCrate3" },
+		BuyOne = { ProductId = 0, Price = 29, Label = "1 Crate", Key = "ExclusiveCrate1" },
+	},
+	StarterPack = {
+		Title = "Limited Starter Pack!",
+		CrateRarity = "Epic",
+		CrateLabel = "1 [NAME] Crate",
+		Contents = {
+			{ Icon = "Cash", Count = "x1", Label = "15 min" },
+			{ Icon = "Clover", Count = "x1", Label = "15 min" },
+			{ Icon = "Shovel", Count = "x1", Label = "Name" },
+		},
+		ProductId = 0,
+		Price = 19,
+		OldPrice = 69,
+		Key = "StarterPack",
+	},
+}
+
+-- Right side HUD buttons (Game Pass IDs)
+Config.GamePasses = {
+	X2Money = { GamePassId = 0, Price = 9, Attribute = "X2Money" },
+	X2Luck = { GamePassId = 0, Price = 9, Attribute = "X2Luck" },
+}
+
+-- Bottom "+5 / +10 / +25 Levels" buttons (Developer Product IDs)
+Config.LevelProducts = {
+	{ Levels = 5, ProductId = 0 },
+	{ Levels = 10, ProductId = 0 },
+	{ Levels = 25, ProductId = 0 },
+}
+
+-- Set false if your game already has its own ProcessReceipt callback
+-- (Roblox only allows one). Then grant purchases yourself.
+Config.HandleReceipts = true
+
+return Config
