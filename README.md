@@ -67,3 +67,11 @@ Build the gym, sell-booth effects and lighting once from the Command Bar (edit m
 require(game.ReplicatedStorage.WorldBuilder).Install()
 ```
 Then drag `Workspace.TreadmillGym` wherever you want it.
+
+## Map revamp, booths, steal sound, glisten
+```lua
+require(game.ReplicatedStorage.WorldBuilder).Revamp()            -- remove stray treadmills, build MarketPlaza, lighting, list steal sounds
+require(game.ReplicatedStorage.WorldBuilder).RemoveStealSounds() -- delete Sound objects named like steal/grab/snatch
+```
+- **MarketPlaza**: SHOP booth (pad opens the shop) and SELL booth (pad sells food → Cash, see `Config.Sell`).
+- **GlistenClient**: tag any GUI element `Glisten` for a periodic shine sweep (SimUI monetization UI is tagged automatically).

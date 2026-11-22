@@ -31,6 +31,9 @@
         },
         "TreadmillClient": {
           "$path": "src/StarterPlayerScripts/TreadmillClient.client.lua"
+        },
+        "GlistenClient": {
+          "$path": "src/StarterPlayerScripts/GlistenClient.client.lua"
         }
       }
     }

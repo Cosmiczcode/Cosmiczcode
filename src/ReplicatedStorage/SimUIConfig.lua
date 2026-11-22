@@ -278,6 +278,24 @@ Config.LevelProducts = {
 	{ Levels = 25, ProductId = 0 },
 }
 
+---------------------------------------------------------------------
+-- Sell booth (Workspace.MarketPlaza.SellBooth pad)
+-- Food is counted from:
+--   * the FoodStat number (leaderstats value or Player attribute), and
+--   * Tools in the Backpack/character tagged FoodTag or with a
+--     SellValue attribute (those tools are removed when sold).
+-- Set UseBuiltIn = false to only fire ServerStorage.SimUI_SellRequested
+-- (player) and handle selling with your own code.
+---------------------------------------------------------------------
+Config.Sell = {
+	UseBuiltIn = true,
+	FoodStat = "Food",
+	CashPerFood = 100,
+	FoodTag = "Food",
+	ToolValueAttribute = "SellValue",
+	Multipliers = { X2Money = 2, VIP = 1.5 }, -- player attribute -> multiplier
+}
+
 -- Set false if your game already has its own ProcessReceipt callback
 -- (Roblox only allows one). Then grant purchases yourself.
 Config.HandleReceipts = true

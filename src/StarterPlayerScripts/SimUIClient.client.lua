@@ -17,6 +17,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local MarketplaceService = game:GetService("MarketplaceService")
+local CollectionService = game:GetService("CollectionService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local Config = require(ReplicatedStorage:WaitForChild("SimUIConfig"))
@@ -265,6 +267,12 @@ local function bind(btn, callback)
 	end)
 	btn.Activated:Connect(callback)
 	return btn
+end
+
+-- Tag a monetization element so GlistenClient sweeps a shine across it
+local function glisten(obj)
+	CollectionService:AddTag(obj, "Glisten")
+	return obj
 end
 
 local function robuxPrice(parent, amount, props, color)
@@ -707,6 +715,7 @@ do
 				TextColor3 = info[3],
 				Parent = b,
 			}), 4)
+			glisten(b)
 			bind(b, function()
 				promptProduct(product.ProductId)
 			end)
@@ -744,6 +753,7 @@ do
 			}), nil, { Rotation = 0 })
 		text(p[2], merge(rect(8, 4, 198, 54), { Parent = b }), 4)
 		robuxPrice(b, cfg.Price, rect(57, 50, 100, 36), rgb(130, 255, 80))
+		glisten(b)
 		bind(b, function()
 			promptPass(cfg.GamePassId)
 		end)
@@ -833,6 +843,8 @@ do
 		local oldPrice = robuxPrice(buyMany, "<s>" .. ex.BuyMany.OldPrice .. "</s>", rect(-14, -16, 70, 26), rgb(255, 40, 60))
 		oldPrice.Rotation = -8
 	end
+	glisten(b1)
+	glisten(buyMany)
 	bind(buyMany, function()
 		promptProduct(ex.BuyMany.ProductId)
 	end)
@@ -841,6 +853,7 @@ do
 		rgb(180, 255, 90), rgb(55, 190, 30))
 	robuxPrice(buyOne, ex.BuyOne.Price, rect(20, 6, 160, 42))
 	text(ex.BuyOne.Label, merge(rect(20, 46, 160, 22), { Parent = buyOne }), 2)
+	glisten(buyOne)
 	bind(buyOne, function()
 		promptProduct(ex.BuyOne.ProductId)
 	end)
@@ -876,6 +889,8 @@ do
 		local oldPrice = robuxPrice(buyPack, "<s>" .. sp.OldPrice .. "</s>", rect(140, -16, 70, 26), rgb(255, 40, 60))
 		oldPrice.Rotation = 8
 	end
+	glisten(b2)
+	glisten(buyPack)
 	bind(buyPack, function()
 		promptProduct(sp.ProductId)
 	end)
@@ -900,6 +915,8 @@ do
 		}), 3)
 		local btn = fancy("TextButton", merge(rect(652, 40, 200, 70), { Parent = b3 }), GREEN_TOP, GREEN_BOTTOM)
 		robuxPrice(btn, skip.Price, rect(20, 10, 160, 50))
+		glisten(b3)
+		glisten(btn)
 		bind(btn, function()
 			promptProduct(skip.ProductId)
 		end)
@@ -982,6 +999,7 @@ do
 		text(amountText, merge(rect(8, 3, 162, 32), { Parent = pill }), 3)
 		local btn = fancy("TextButton", merge(rect(12, 204, 178, 50), { Parent = card }), GREEN_TOP, GREEN_BOTTOM)
 		robuxPrice(btn, pack.Price, rect(12, 6, 154, 38))
+		glisten(card)
 		bind(btn, function()
 			promptProduct(pack.ProductId)
 		end)
@@ -1044,6 +1062,7 @@ do
 					promptPass(cfg.GamePassId)
 				end
 			end)
+			glisten(card)
 			passCards[entry.Key] = { Cfg = cfg, Button = btn, Price = price, Owned = owned }
 		end
 	end
@@ -1405,6 +1424,7 @@ do
 			rgb(255, 235, 90), rgb(255, 160, 20))
 		btnText.Visible = false
 		local price = robuxPrice(btn, cfg.Price, rect(20, 12, 188, 48))
+		glisten(btn)
 		sub.Text = "Game Pass"
 		rows[entry.Key] = { Button = btn, Text = btnText, Price = price, Cfg = cfg }
 		bind(btn, function()
@@ -1511,5 +1531,79 @@ task.spawn(function()
 		refreshPasses()
 		refreshShopPasses()
 		task.wait(0.25)
+	end
+end)
+
+---------------------------------------------------------------------
+-- Market plaza pads: SHOP pad opens the shop, SELL pad sells your food
+---------------------------------------------------------------------
+local toast = text("", {
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.new(0.5, 0, 0, 190),
+	Size = UDim2.fromOffset(900, 70),
+	TextTransparency = 1,
+	ZIndex = 50,
+	Parent = root,
+}, 4)
+local toastStroke = toast:FindFirstChildOfClass("UIStroke")
+toastStroke.Transparency = 1
+local toastId = 0
+local function showToast(msg, color)
+	toastId += 1
+	local id = toastId
+	toast.Text = msg
+	toast.TextColor3 = color or WHITE
+	toast.TextTransparency = 0
+	toastStroke.Transparency = 0
+	local s = toast:FindFirstChild("PopScale") or create("UIScale", { Name = "PopScale", Parent = toast })
+	s.Scale = 0.6
+	tween(s, { Scale = 1 }, 0.25, Enum.EasingStyle.Back)
+	task.delay(2, function()
+		if id == toastId then
+			tween(toast, { TextTransparency = 1 }, 0.4)
+			tween(toastStroke, { Transparency = 1 }, 0.4)
+		end
+	end)
+end
+
+local onPad = {}
+local padAcc = 0
+RunService.Heartbeat:Connect(function(dt)
+	padAcc += dt
+	if padAcc < 0.15 then
+		return
+	end
+	padAcc = 0
+	local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not rootPart then
+		return
+	end
+	for _, tag in ipairs({ "ShopPad", "SellPad" }) do
+		for _, pad in ipairs(CollectionService:GetTagged(tag)) do
+			if pad:IsA("BasePart") then
+				local rel = pad.CFrame:PointToObjectSpace(rootPart.Position)
+				local half = pad.Size / 2
+				local inside = math.abs(rel.X) <= half.X and math.abs(rel.Z) <= half.Z and math.abs(rel.Y) <= half.Y + 3
+				if inside and not onPad[pad] then
+					onPad[pad] = true
+					if tag == "ShopPad" then
+						if openName ~= "Shop" then
+							openWindow("Shop")
+						end
+					else
+						task.spawn(function()
+							local ok, result = Remotes:WaitForChild("SellFood"):InvokeServer()
+							if ok and typeof(result) == "number" then
+								showToast("💰 Sold for $" .. abbreviate(result) .. "!", rgb(120, 255, 90))
+							elseif typeof(result) == "string" then
+								showToast(result, rgb(255, 90, 90))
+							end
+						end)
+					end
+				elseif not inside and onPad[pad] then
+					onPad[pad] = nil
+				end
+			end
+		end
 	end
 end)

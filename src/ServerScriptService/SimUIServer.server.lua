@@ -46,10 +46,12 @@ local DataUpdated = make("RemoteEvent", "DataUpdated", remotes)
 local GoToBase = make("RemoteEvent", "GoToBase", remotes)
 local BuyUpgrade = make("RemoteFunction", "BuyUpgrade", remotes)
 local RebirthRemote = make("RemoteFunction", "Rebirth", remotes)
+local SellFood = make("RemoteFunction", "SellFood", remotes)
 
 local DiscoverItem = make("BindableEvent", "SimUI_DiscoverItem", ServerStorage)
 local GrantReward = make("BindableEvent", "SimUI_GrantReward", ServerStorage)
 local GetDataHook = make("BindableFunction", "SimUI_GetData", ServerStorage)
+local SellRequested = make("BindableEvent", "SimUI_SellRequested", ServerStorage)
 
 ---------------------------------------------------------------------
 -- Data
@@ -420,6 +422,84 @@ RebirthRemote.OnServerInvoke = function(player)
 end
 
 ---------------------------------------------------------------------
+-- Sell booth
+---------------------------------------------------------------------
+local CollectionService = game:GetService("CollectionService")
+local lastSell = {}
+
+local function nearPad(player, tag)
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return false
+	end
+	for _, pad in ipairs(CollectionService:GetTagged(tag)) do
+		if pad:IsA("BasePart") and (pad.Position - root.Position).Magnitude < 14 then
+			return true
+		end
+	end
+	return false
+end
+
+SellFood.OnServerInvoke = function(player)
+	if lastSell[player] and os.clock() - lastSell[player] < 1 then
+		return false, nil
+	end
+	lastSell[player] = os.clock()
+	if not nearPad(player, "SellPad") then
+		return false, "Stand on the SELL pad!"
+	end
+	SellRequested:Fire(player)
+	local cfg = Config.Sell or {}
+	if cfg.UseBuiltIn == false then
+		return true, nil
+	end
+
+	local value = 0
+	local count = 0
+	-- numeric food stat
+	if cfg.FoodStat then
+		local food = getStat(player, cfg.FoodStat)
+		if food > 0 then
+			value += food * (cfg.CashPerFood or 1)
+			count += food
+			setStat(player, cfg.FoodStat, 0)
+		end
+	end
+	-- food tools
+	local containers = { player:FindFirstChildOfClass("Backpack"), player.Character }
+	for _, container in ipairs(containers) do
+		if container then
+			for _, tool in ipairs(container:GetChildren()) do
+				if tool:IsA("Tool") then
+					local v = tool:GetAttribute(cfg.ToolValueAttribute or "SellValue")
+					if v == nil and cfg.FoodTag and CollectionService:HasTag(tool, cfg.FoodTag) then
+						v = cfg.CashPerFood or 1
+					end
+					if typeof(v) == "number" then
+						value += v
+						count += 1
+						tool:Destroy()
+					end
+				end
+			end
+		end
+	end
+
+	if count == 0 then
+		return false, "You have no food to sell!"
+	end
+	for attr, mult in pairs(cfg.Multipliers or {}) do
+		if player:GetAttribute(attr) then
+			value *= mult
+		end
+	end
+	value = math.floor(value)
+	addStat(player, Config.Stats.Currency, value)
+	GrantReward:Fire(player, { Type = "Sold", Amount = value, Count = count })
+	return true, value
+end
+
+---------------------------------------------------------------------
 -- My Base teleport
 ---------------------------------------------------------------------
 local function ownedBy(obj, player)
@@ -551,6 +631,7 @@ Players.PlayerRemoving:Connect(function(player)
 	claimDebounce[player] = nil
 	busy[player] = nil
 	lastTeleport[player] = nil
+	lastSell[player] = nil
 end)
 
 game:BindToClose(function()

@@ -18,6 +18,21 @@
 	Each part can be re-run on its own:
 	  .BuildGym(cframe?)  .DecorateSellBooths()  .Lighting()
 	Run .Install() again any time; it replaces what it made before.
+
+	MAP REVAMP (run in the Command Bar, edit mode):
+
+		require(game.ReplicatedStorage.WorldBuilder).Revamp()
+
+	  - removes treadmills that aren't in the TreadmillGym (e.g. beside the
+	    player pens) and the old TreadmillShowcase
+	  - builds Workspace.MarketPlaza: a SHOP booth (step on its pad to open
+	    the shop) and a SELL booth (step on its pad to sell your food),
+	    with a fountain, lamp posts, trees, flowers and balloons
+	  - re-applies lighting
+	  - lists every sound / script that looks like the "steal" sound
+
+	Then remove the steal sound with:
+		require(game.ReplicatedStorage.WorldBuilder).RemoveStealSounds()
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -231,7 +246,8 @@ function WB.DecorateSellBooths()
 
 	local count = 0
 	for _, inst in ipairs(workspace:GetDescendants()) do
-		if (inst:IsA("Model") or inst:IsA("BasePart")) and isSell(inst) then
+		if (inst:IsA("Model") or inst:IsA("BasePart")) and isSell(inst) and not inst:GetAttribute("BuiltBy")
+			and not inst:FindFirstAncestor("MarketPlaza") then
 			-- only the outermost "sell" object, and never players / our own fx
 			local parent = inst.Parent
 			local nested = false
@@ -384,6 +400,357 @@ function WB.Install(origin)
 	print("[WorldBuilder] Done! Workspace.TreadmillGym is at " .. tostring(gym:GetPivot().Position)
 		.. " - drag it wherever you want it.")
 	return gym
+end
+
+---------------------------------------------------------------------
+-- 4. Remove treadmills that aren't part of the gym
+---------------------------------------------------------------------
+function WB.RemoveStrayTreadmills()
+	local gym = workspace:FindFirstChild("TreadmillGym")
+	local removed = 0
+	local showcase = workspace:FindFirstChild("TreadmillShowcase")
+	if showcase then
+		showcase:Destroy()
+	end
+	for _, inst in ipairs(workspace:GetDescendants()) do
+		if inst.Parent and inst:IsA("Model") and (gym == nil or not inst:IsDescendantOf(gym)) then
+			local isTreadmill = CollectionService:HasTag(inst, "Treadmill") or inst:GetAttribute("Skin") ~= nil
+			if isTreadmill then
+				print("[WorldBuilder] Removed treadmill:", inst:GetFullName())
+				inst:Destroy()
+				removed += 1
+			end
+		end
+	end
+	print("[WorldBuilder] Removed " .. removed .. " treadmill(s) outside the TreadmillGym")
+	return removed
+end
+
+---------------------------------------------------------------------
+-- 5. Market plaza: Shop booth + Sell booth + decorations
+---------------------------------------------------------------------
+local WOOD = rgb(176, 120, 66)
+local WOOD_DARK = rgb(120, 78, 40)
+
+-- A market stall. Front faces local -Z.
+local function booth(parent, cf, opts)
+	local m = Instance.new("Model")
+	m.Name = opts.Name
+	m:SetAttribute("BuiltBy", "WorldBuilder")
+	m.Parent = parent
+	local function at(x, y, z)
+		return cf * CF(x, y, z)
+	end
+
+	P(m, "Platform", V(16, 1, 12), at(0, 0.5, 0), WOOD_DARK, M.WoodPlanks)
+	P(m, "Counter", V(13, 3.6, 2.6), at(0, 2.8, -3.6), WOOD, M.Wood)
+	P(m, "CounterTop", V(13.6, 0.4, 3.2), at(0, 4.8, -3.6), opts.Trim, M.SmoothPlastic)
+	P(m, "BackWall", V(14, 9, 1), at(0, 5.5, 5.2), WOOD, M.WoodPlanks)
+	for _, x in ipairs({ -7, 7 }) do
+		for _, z in ipairs({ -4.6, 5.2 }) do
+			P(m, "Post", V(0.9, 10.5, 0.9), at(x, 6, z), WOOD_DARK, M.Wood)
+		end
+	end
+	-- striped awning sloping down to the front
+	for i = 0, 8 do
+		local x = -7.2 + i * 1.8
+		P(m, "Awning", V(1.8, 0.4, 12.4), at(x, 11.2, 0.3) * ANG(rad(12), 0, 0),
+			i % 2 == 0 and opts.Awning[1] or opts.Awning[2])
+		-- scalloped edge
+		P(m, "Scallop", V(1.6, 1.6, 1.6), at(x, 9.8, -5.8), i % 2 == 0 and opts.Awning[1] or opts.Awning[2],
+			M.SmoothPlastic, { Shape = Enum.PartType.Ball })
+	end
+
+	-- goods on the counter
+	local r = Random.new(#opts.Name)
+	for i = 1, 7 do
+		local c = opts.Goods[(i - 1) % #opts.Goods + 1]
+		local g = P(m, "Goods", V(1.1, 1.1, 1.1), at(-5 + i * 1.4, 5.55, -3.6 + r:NextNumber(-0.6, 0.6)), c,
+			M.SmoothPlastic, { Shape = opts.GoodsShape or Enum.PartType.Ball, CanCollide = false })
+		fx(g, "Bob", 3, 0.12, i)
+	end
+
+	-- big sign on the roof
+	local signBoard = P(m, "Sign", V(12, 3.6, 0.8), at(0, 14.2, -0.8), opts.Trim, M.SmoothPlastic)
+	sign(signBoard, Enum.NormalId.Front, opts.Title, opts.Gradient, 30)
+	sign(signBoard, Enum.NormalId.Back, opts.Title, opts.Gradient, 30)
+	fx(P(m, "SignTrim", V(12.4, 0.3, 1), at(0, 16.1, -0.8), opts.Neon, M.Neon, { CanCollide = false }), "Pulse", 3, 0.5)
+	fx(P(m, "SignTrim", V(12.4, 0.3, 1), at(0, 12.3, -0.8), opts.Neon, M.Neon, { CanCollide = false }), "Pulse", 3, 0.5,
+		1.5)
+
+	-- floating bobbing label
+	local anchor = P(m, "FloatAnchor", V(1, 1, 1), at(0, 20, -0.8), opts.Neon, M.SmoothPlastic,
+		{ Transparency = 1, CanCollide = false })
+	fx(anchor, "Bob", 2, 0.8)
+	local bb = Instance.new("BillboardGui")
+	bb.Size = UDim2.fromScale(16, 4.5)
+	bb.LightInfluence = 0
+	bb.MaxDistance = 300
+	bb.Parent = anchor
+	local t = Instance.new("TextLabel")
+	t.Size = UDim2.fromScale(1, 1)
+	t.BackgroundTransparency = 1
+	t.Font = Enum.Font.FredokaOne
+	t.TextScaled = true
+	t.Text = opts.Float
+	t.TextColor3 = Color3.new(1, 1, 1)
+	t.Parent = bb
+	local st = Instance.new("UIStroke")
+	st.Thickness = 4
+	st.Parent = t
+	local g = Instance.new("UIGradient")
+	g.Color = opts.Gradient
+	g.Rotation = 90
+	g.Parent = t
+
+	-- step-on pad in front
+	local padCenter = at(0, 0, -10)
+	local ring = P(m, "PadRing", V(0.2, 10, 10), padCenter * CF(0, 0.1, 0) * ANG(0, 0, rad(90)), opts.Neon, M.Neon,
+		{ Shape = Enum.PartType.Cylinder, CanCollide = false, Transparency = 0.3 })
+	fx(ring, "Pulse", 3, 0.5)
+	P(m, "PadInner", V(0.22, 8.4, 8.4), padCenter * CF(0, 0.1, 0) * ANG(0, 0, rad(90)), opts.Trim, M.SmoothPlastic,
+		{ Shape = Enum.PartType.Cylinder, CanCollide = false, Transparency = 0.15 })
+	for k = 0, 9 do
+		local a = k / 10 * math.pi * 2
+		local center = padCenter.Position
+		local dot = P(m, "PadDot", V(0.9, 0.35, 0.9), CF(center + V(math.cos(a) * 5.8, 0.3, math.sin(a) * 5.8)),
+			k % 2 == 0 and YELLOW or opts.Neon, M.Neon, { CanCollide = false })
+		dot:SetAttribute("FxCenter", center)
+		fx(dot, "Orbit", 0.8)
+	end
+	local pad = P(m, "Pad", V(9, 5, 9), padCenter * CF(0, 2.5, 0), opts.Neon, M.SmoothPlastic,
+		{ Transparency = 1, CanCollide = false })
+	CollectionService:AddTag(pad, opts.PadTag)
+
+	-- sparkles + light
+	local pe = Instance.new("ParticleEmitter")
+	pe.Color = ColorSequence.new(opts.Neon, YELLOW)
+	pe.LightEmission = 0.8
+	pe.Rate = 10
+	pe.Lifetime = NumberRange.new(1, 1.8)
+	pe.Speed = NumberRange.new(3, 6)
+	pe.SpreadAngle = Vector2.new(25, 25)
+	pe.EmissionDirection = Enum.NormalId.Top
+	pe.Size = NumberSequence.new(0.45, 0)
+	pe.Parent = pad
+	light(signBoard, opts.Neon, 30, 2)
+
+	m.PrimaryPart = m:FindFirstChild("Platform")
+	return m
+end
+
+local function tree(parent, pos, leafColor)
+	P(parent, "Trunk", V(1.6, 7, 1.6), CF(pos + V(0, 3.5, 0)), WOOD_DARK, M.Wood)
+	for i, off in ipairs({ V(0, 8, 0), V(1.6, 7, 0.8), V(-1.4, 7.2, -0.6), V(0, 9.6, 0) }) do
+		fx(P(parent, "Leaves", V(4.5, 4.5, 4.5), CF(pos + off), leafColor, M.Grass, { Shape = Enum.PartType.Ball }),
+			"Sway", 1.2, 0.05, pos.X + i)
+	end
+end
+
+local function lamp(parent, pos, color)
+	P(parent, "LampPost", V(0.7, 9, 0.7), CF(pos + V(0, 4.5, 0)), rgb(40, 40, 60), M.Metal)
+	local bulb = P(parent, "Bulb", V(1.8, 1.8, 1.8), CF(pos + V(0, 9.6, 0)), color, M.Neon,
+		{ Shape = Enum.PartType.Ball, CanCollide = false })
+	fx(bulb, "Pulse", 2, 0.3, pos.Z)
+	light(bulb, color, 24, 1.6)
+end
+
+local function balloons(parent, pos)
+	local colors = { PINK, CYAN, YELLOW, rgb(120, 255, 90), rgb(170, 110, 255) }
+	for i = 1, 5 do
+		local bp = pos + V(math.cos(i * 1.3) * 1.2, 7 + i * 0.6, math.sin(i * 1.3) * 1.2)
+		fx(P(parent, "Balloon", V(1.8, 2.2, 1.8), CF(bp), colors[i], M.SmoothPlastic,
+			{ Shape = Enum.PartType.Ball, CanCollide = false }), "Bob", 1.5, 0.5, i)
+		P(parent, "String", V(0.05, bp.Y - pos.Y - 1, 0.05), CF((bp + pos) / 2 - V(0, 0.5, 0)), rgb(240, 240, 240),
+			M.SmoothPlastic, { CanCollide = false })
+	end
+end
+
+local function fountain(parent, pos)
+	P(parent, "FountainBase", V(1.4, 12, 12), CF(pos + V(0, 0.7, 0)) * ANG(0, 0, rad(90)), rgb(200, 205, 225),
+		M.Marble, { Shape = Enum.PartType.Cylinder })
+	local water = P(parent, "Water", V(0.3, 10.4, 10.4), CF(pos + V(0, 1.4, 0)) * ANG(0, 0, rad(90)),
+		rgb(70, 190, 255), M.Glass, { Shape = Enum.PartType.Cylinder, Transparency = 0.25, CanCollide = false })
+	fx(water, "Pulse", 1.5, 0.2)
+	P(parent, "FountainPillar", V(4, 2, 2), CF(pos + V(0, 3, 0)) * ANG(0, 0, rad(90)), rgb(200, 205, 225), M.Marble,
+		{ Shape = Enum.PartType.Cylinder })
+	local top = P(parent, "FountainTop", V(0.6, 5, 5), CF(pos + V(0, 5.2, 0)) * ANG(0, 0, rad(90)), rgb(200, 205, 225),
+		M.Marble, { Shape = Enum.PartType.Cylinder })
+	local spray = Instance.new("ParticleEmitter")
+	spray.Color = ColorSequence.new(rgb(200, 240, 255))
+	spray.LightEmission = 0.4
+	spray.Rate = 40
+	spray.Lifetime = NumberRange.new(1, 1.4)
+	spray.Speed = NumberRange.new(10, 13)
+	spray.SpreadAngle = Vector2.new(18, 18)
+	spray.EmissionDirection = Enum.NormalId.Top
+	spray.Acceleration = V(0, -25, 0)
+	spray.Size = NumberSequence.new(0.5, 0.2)
+	spray.Transparency = NumberSequence.new(0.2, 1)
+	spray.Parent = top
+	light(top, CYAN, 20, 1.5)
+end
+
+function WB.BuildPlaza(origin)
+	local old = workspace:FindFirstChild("MarketPlaza")
+	if old then
+		origin = origin or old:GetPivot()
+		old:Destroy()
+	end
+	if not origin then
+		local spawn = workspace:FindFirstChildWhichIsA("SpawnLocation", true)
+		local base = spawn and V(spawn.Position.X, spawn.Position.Y - spawn.Size.Y / 2, spawn.Position.Z) or V(0, 0, 0)
+		local pos = base + V(0, 0, 50)
+		-- face the spawn so the booth fronts look at new players
+		origin = CFrame.lookAt(pos, V(base.X, pos.Y, base.Z))
+	end
+
+	local plaza = Instance.new("Model")
+	plaza.Name = "MarketPlaza"
+
+	-- colourful tiled floor + neon border
+	P(plaza, "PlazaFloor", V(70, 0.6, 44), CF(0, 0.3, 0), rgb(235, 225, 200), M.Slate)
+	for i = 0, 6 do
+		for j = 0, 3 do
+			if (i + j) % 2 == 0 then
+				P(plaza, "Tile", V(9.6, 0.05, 10.6), CF(-30 + i * 10, 0.62, -16.5 + j * 11), ({ PINK, CYAN, YELLOW })[(i + j)
+					% 3 + 1], M.SmoothPlastic, { Transparency = 0.55, CanCollide = false })
+			end
+		end
+	end
+	for _, z in ipairs({ -22, 22 }) do
+		fx(P(plaza, "Border", V(70, 0.3, 0.4), CF(0, 0.7, z), CYAN, M.Neon, { CanCollide = false }), "Pulse", 2, 0.5, z)
+	end
+	for _, x in ipairs({ -35, 35 }) do
+		fx(P(plaza, "Border", V(0.4, 0.3, 44), CF(x, 0.7, 0), PINK, M.Neon, { CanCollide = false }), "Pulse", 2, 0.5, x)
+	end
+
+	booth(plaza, CF(-20, 0.6, 8), {
+		Name = "ShopBooth",
+		Title = "SHOP",
+		Float = "🛒 SHOP 🛒",
+		Awning = { rgb(60, 160, 255), rgb(255, 255, 255) },
+		Trim = rgb(40, 110, 230),
+		Neon = CYAN,
+		Gradient = ColorSequence.new(rgb(140, 230, 255), rgb(60, 120, 255)),
+		Goods = { rgb(255, 80, 150), rgb(255, 215, 50), rgb(120, 255, 90), rgb(170, 110, 255) },
+		GoodsShape = Enum.PartType.Block,
+		PadTag = "ShopPad",
+	})
+	booth(plaza, CF(20, 0.6, 8), {
+		Name = "SellBooth",
+		Title = "SELL",
+		Float = "💰 SELL FOOD 💰",
+		Awning = { rgb(235, 40, 50), rgb(255, 255, 255) },
+		Trim = rgb(200, 30, 40),
+		Neon = rgb(90, 255, 90),
+		Gradient = ColorSequence.new(rgb(255, 240, 90), rgb(80, 255, 90)),
+		Goods = { rgb(230, 40, 40), rgb(255, 160, 30), rgb(255, 230, 60), rgb(120, 220, 60) },
+		PadTag = "SellPad",
+	})
+
+	fountain(plaza, V(0, 0.6, 2))
+	for _, x in ipairs({ -32, -10, 10, 32 }) do
+		lamp(plaza, V(x, 0.6, -19), x < 0 and PINK or CYAN)
+	end
+	for _, pos in ipairs({ V(-32, 0.6, 16), V(32, 0.6, 16) }) do
+		tree(plaza, pos, rgb(70, 210, 70))
+	end
+	for _, pos in ipairs({ V(-8, 0.6, 17), V(8, 0.6, 17) }) do
+		balloons(plaza, pos)
+	end
+	-- flower beds
+	local flowerColors = { PINK, YELLOW, rgb(255, 255, 255), rgb(170, 110, 255), rgb(255, 120, 60) }
+	local r = Random.new(42)
+	for _, bed in ipairs({ V(-30, 0.6, -10), V(30, 0.6, -10), V(-4, 0.6, -14), V(4, 0.6, -14) }) do
+		P(plaza, "FlowerBed", V(6, 0.8, 4), CF(bed + V(0, 0.4, 0)), rgb(110, 70, 40), M.Ground)
+		for k = 1, 8 do
+			local fp = bed + V(r:NextNumber(-2.5, 2.5), 1.3, r:NextNumber(-1.6, 1.6))
+			P(plaza, "Stem", V(0.15, 0.8, 0.15), CF(fp - V(0, 0.4, 0)), rgb(60, 170, 60), M.Grass, { CanCollide = false })
+			fx(P(plaza, "Flower", V(0.6, 0.6, 0.6), CF(fp), flowerColors[k % #flowerColors + 1], M.SmoothPlastic,
+				{ Shape = Enum.PartType.Ball, CanCollide = false }), "Sway", 2, 0.15, k)
+		end
+	end
+
+	plaza.PrimaryPart = plaza:FindFirstChild("PlazaFloor")
+	plaza:PivotTo(origin)
+	plaza.Parent = workspace
+	print("[WorldBuilder] Built Workspace.MarketPlaza - drag it wherever you want it.")
+	return plaza
+end
+
+---------------------------------------------------------------------
+-- 6. Steal sound
+---------------------------------------------------------------------
+local SOUND_WORDS = { "steal", "stole", "grab", "snatch", "pickup", "pick_up", "collect", "take" }
+local REMOVE_WORDS = { "steal", "stole", "snatch", "grab" } -- stricter list used for deleting
+
+local function looksLikeSteal(name, words)
+	name = name:lower()
+	for _, w in ipairs(words or SOUND_WORDS) do
+		if name:find(w, 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
+local SEARCH_ROOTS = { "Workspace", "ReplicatedStorage", "ServerStorage", "ServerScriptService", "StarterGui",
+	"StarterPlayer", "StarterPack", "SoundService" }
+
+-- Prints sounds whose name looks like a steal sound, and every script line
+-- that mentions stealing and plays a sound.
+function WB.FindStealSounds()
+	print("[WorldBuilder] ---- Possible steal sounds ----")
+	for _, rootName in ipairs(SEARCH_ROOTS) do
+		local root = game:GetService(rootName)
+		for _, d in ipairs(root:GetDescendants()) do
+			if d:IsA("Sound") and (looksLikeSteal(d.Name) or (d.Parent and looksLikeSteal(d.Parent.Name))) then
+				print("  Sound:", d:GetFullName(), d.SoundId)
+			elseif d:IsA("LuaSourceContainer") then
+				local ok, src = pcall(function()
+					return d.Source
+				end)
+				if ok and src and src:lower():find("steal") then
+					local n = 0
+					for line in (src .. "\n"):gmatch("(.-)\n") do
+						n += 1
+						local l = line:lower()
+						if l:find("sound") and (l:find(":play") or l:find("soundid")) then
+							print(string.format("  Script line: %s:%d  %s", d:GetFullName(), n, (line:gsub("^%s+", ""))))
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+-- Deletes Sound objects whose name (or parent's name) looks like a steal
+-- sound. Sounds created by scripts at runtime are listed by
+-- FindStealSounds() so that line can be removed instead.
+function WB.RemoveStealSounds()
+	local removed = 0
+	for _, rootName in ipairs(SEARCH_ROOTS) do
+		for _, d in ipairs(game:GetService(rootName):GetDescendants()) do
+			if d:IsA("Sound") and d.Parent
+				and (looksLikeSteal(d.Name, REMOVE_WORDS) or looksLikeSteal(d.Parent.Name, REMOVE_WORDS)) then
+				print("[WorldBuilder] Removed sound:", d:GetFullName())
+				d:Destroy()
+				removed += 1
+			end
+		end
+	end
+	print("[WorldBuilder] Removed " .. removed .. " steal sound(s). If you still hear it, check the script lines "
+		.. "printed by FindStealSounds().")
+	return removed
+end
+
+function WB.Revamp(plazaOrigin)
+	WB.RemoveStrayTreadmills()
+	WB.Lighting()
+	WB.BuildPlaza(plazaOrigin)
+	WB.FindStealSounds()
 end
 
 return WB

@@ -11,6 +11,7 @@ ITEMS = [
     ("ModuleScript", "WorldBuilder", "src/ReplicatedStorage/WorldBuilder.lua", "Move to ReplicatedStorage"),
     ("Script", "TreadmillServer", "src/ServerScriptService/TreadmillServer.server.lua", "Move to ServerScriptService"),
     ("LocalScript", "TreadmillClient", "src/StarterPlayerScripts/TreadmillClient.client.lua", "Move to StarterPlayer > StarterPlayerScripts"),
+    ("LocalScript", "GlistenClient", "src/StarterPlayerScripts/GlistenClient.client.lua", "Move to StarterPlayer > StarterPlayerScripts"),
 ]
 
 def item(ref, cls, name, src):
