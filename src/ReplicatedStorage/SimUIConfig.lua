@@ -160,18 +160,49 @@ Config.Shop = {
 		OldPrice = 69,
 		Key = "StarterPack",
 	},
+	TreadmillSkip = {
+		Title = "Skip to the next Treadmill!",
+		Description = "Instantly unlock your next treadmill tier",
+		ProductId = 0,
+		Price = 49,
+		Key = "TreadmillSkip",
+	},
+	-- Badge = nil | "Good Value" | "Great Value" | "Most Value"
+	CashPacks = {
+		{ Amount = 297e6, Price = 24, ProductId = 0 },
+		{ Amount = 1.78e9, Price = 59, ProductId = 0, Badge = "Good Value" },
+		{ Amount = 3.56e9, Price = 79, ProductId = 0, Badge = "Great Value" },
+		{ Amount = 10.7e9, Price = 199, ProductId = 0, Badge = "Most Value" },
+	},
+	SpeedPacks = {
+		{ Amount = 5e3, Price = 29, ProductId = 0 },
+		{ Amount = 25e3, Price = 79, ProductId = 0, Badge = "Good Value" },
+		{ Amount = 100e3, Price = 199, ProductId = 0, Badge = "Most Value" },
+	},
 }
 
 -- Game passes: used by the right side X2 buttons and the "Pass" window.
 -- Owning one sets the Player attribute named in Attribute to true.
 Config.GamePasses = {
 	X2Money = {
-		Order = 1, GamePassId = 0, Price = 9, Attribute = "X2Money",
+		Order = 1, GamePassId = 0, Price = 99, Attribute = "X2Money",
 		Name = "X2 Money", Description = "Double all money you earn", Emoji = "💵",
 	},
 	X2Luck = {
-		Order = 2, GamePassId = 0, Price = 9, Attribute = "X2Luck",
+		Order = 2, GamePassId = 0, Price = 149, Attribute = "X2Luck",
 		Name = "X2 Luck", Description = "Double your luck on every roll", Emoji = "🍀",
+	},
+	X2Speed = {
+		Order = 3, GamePassId = 0, Price = 149, Attribute = "X2Speed",
+		Name = "X2 Speed", Description = "Double Speed from every treadmill!", Emoji = "⚡",
+	},
+	VIP = {
+		Order = 4, GamePassId = 0, Price = 299, Attribute = "VIP",
+		Name = "VIP", Description = "+50% Speed forever and a VIP tag", Emoji = "👑",
+	},
+	AllTreadmills = {
+		Order = 5, GamePassId = 0, Price = 999, Attribute = "AllTreadmills",
+		Name = "All Treadmills", Description = "Unlock all 12 treadmill tiers now!", Emoji = "🏃",
 	},
 }
 

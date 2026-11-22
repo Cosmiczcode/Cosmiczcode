@@ -52,3 +52,18 @@ In Studio's Command Bar:
 require(game.ReplicatedStorage.TreadmillSkins).Install()   -- templates + showcase
 require(game.ReplicatedStorage.TreadmillSkins).Swap(workspace.MyTreadmill, "Inferno")  -- reskin one
 ```
+
+## Treadmill tiers, gym & map glow-up
+Scripts: `TreadmillConfig`, `WorldBuilder` (ReplicatedStorage), `TreadmillServer` (ServerScriptService),
+`TreadmillClient` (StarterPlayerScripts).
+
+- 12 tiers (`TreadmillConfig.Tiers`): tier 1 free, buy the next with Cash; higher tiers give more Speed/s.
+- Step on an unlocked treadmill → you snap on and auto-run with your run animation; **Jump** to get off.
+- Signs above each treadmill, unlock prompt on the next tier, "+Speed" popups, animated effects and belts.
+- Speed saves, shows on the leaderboard and makes you walk faster.
+
+Build the gym, sell-booth effects and lighting once from the Command Bar (edit mode):
+```lua
+require(game.ReplicatedStorage.WorldBuilder).Install()
+```
+Then drag `Workspace.TreadmillGym` wherever you want it.

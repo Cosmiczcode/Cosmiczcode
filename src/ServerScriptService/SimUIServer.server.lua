@@ -272,6 +272,15 @@ local shop = Config.Shop
 registerProduct(shop.ExclusiveCrate.BuyMany.ProductId, { Type = "Product", Key = shop.ExclusiveCrate.BuyMany.Key })
 registerProduct(shop.ExclusiveCrate.BuyOne.ProductId, { Type = "Product", Key = shop.ExclusiveCrate.BuyOne.Key })
 registerProduct(shop.StarterPack.ProductId, { Type = "Product", Key = shop.StarterPack.Key })
+for _, pack in ipairs(shop.CashPacks or {}) do
+	registerProduct(pack.ProductId, { Type = "Stat", Stat = Config.Stats.Currency, Amount = pack.Amount })
+end
+for _, pack in ipairs(shop.SpeedPacks or {}) do
+	registerProduct(pack.ProductId, { Type = "Stat", Stat = "Speed", Amount = pack.Amount })
+end
+if shop.TreadmillSkip then
+	registerProduct(shop.TreadmillSkip.ProductId, { Type = "Product", Key = shop.TreadmillSkip.Key })
+end
 for _, lp in ipairs(Config.LevelProducts) do
 	registerProduct(lp.ProductId, { Type = "Levels", Amount = lp.Levels })
 end
@@ -340,6 +349,7 @@ local function applyUpgrades(player)
 			local bonus = (data.Upgrades[id] or 0) * up.PerLevel
 			if up.Effect == "WalkSpeed" then
 				hum.WalkSpeed = game:GetService("StarterPlayer").CharacterWalkSpeed + bonus
+					+ (player:GetAttribute("TreadmillSpeedBonus") or 0)
 			elseif up.Effect == "JumpPower" then
 				hum.UseJumpPower = true
 				hum.JumpPower = game:GetService("StarterPlayer").CharacterJumpPower + bonus

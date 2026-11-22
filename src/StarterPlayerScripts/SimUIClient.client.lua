@@ -309,6 +309,21 @@ local function formatNumber(n)
 	return (n < 0 and "-" or "") .. out
 end
 
+local SUFFIX = { "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc" }
+local function abbreviate(n)
+	n = tonumber(n) or 0
+	if math.abs(n) < 1000 then
+		return formatNumber(n)
+	end
+	local i = 1
+	while math.abs(n) >= 1000 and i < #SUFFIX do
+		n /= 1000
+		i += 1
+	end
+	local str = math.abs(n) >= 100 and tostring(math.floor(n)) or string.format("%.1f", math.floor(n * 10) / 10)
+	return (str:gsub("%.0$", "")) .. SUFFIX[i]
+end
+
 local function getStat(name)
 	if not name then
 		return nil
@@ -568,8 +583,14 @@ end
 ---------------------------------------------------------------------
 -- HUD: bottom-left stats
 ---------------------------------------------------------------------
-local rebirthText, moneyText, friendText
+local rebirthText, moneyText, friendText, speedText
 do
+	icon(nil, merge(screenRect("L", "B", 26, 800, 56, 52), { Parent = root }), "⚡")
+	speedText = text("0", merge(screenRect("L", "B", 88, 800, 400, 52), {
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = rgb(90, 220, 255),
+		Parent = root,
+	}), 4)
 	icon("Rebirth", merge(screenRect("L", "B", 26, 858, 56, 56), { Parent = root }))
 	rebirthText = text("0", merge(screenRect("L", "B", 88, 860, 200, 54), {
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -748,8 +769,9 @@ end
 ---------------------------------------------------------------------
 -- SHOP WINDOW
 ---------------------------------------------------------------------
+local refreshShopPasses = function() end
 do
-	local win = makeWindow("Shop", "C", "C", 456, 203, 922, 625, rgb(255, 90, 115), rgb(210, 15, 45), "Basket", "Shop")
+	local win = makeWindow("Shop", "C", "C", 456, 203, 922, 625, rgb(255, 210, 60), rgb(255, 130, 20), "Basket", "Shop")
 	local s = Config.Shop
 
 	local scroll = create("ScrollingFrame", {
@@ -857,6 +879,185 @@ do
 	bind(buyPack, function()
 		promptProduct(sp.ProductId)
 	end)
+
+	local GREEN_TOP, GREEN_BOTTOM = rgb(170, 255, 90), rgb(50, 190, 30)
+	local order = 3
+
+	-- Banner 3: skip to next treadmill
+	local skip = s.TreadmillSkip
+	if skip then
+		local b3 = fancy("Frame", { Name = "TreadmillSkip", Size = UDim2.fromOffset(868, 150), LayoutOrder = order,
+			Parent = scroll }, ColorSequence.new({
+				ColorSequenceKeypoint.new(0, rgb(60, 210, 255)),
+				ColorSequenceKeypoint.new(1, rgb(160, 70, 255)),
+			}), nil, { Rotation = 0 })
+		icon(nil, merge(rect(30, 15, 120, 120), { Parent = b3 }), "🏃")
+		text(skip.Title, merge(rect(165, 14, 470, 58), { TextXAlignment = Enum.TextXAlignment.Left, Parent = b3 }), 4)
+		text(skip.Description, merge(rect(165, 76, 470, 40), {
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextColor3 = rgb(235, 240, 255),
+			Parent = b3,
+		}), 3)
+		local btn = fancy("TextButton", merge(rect(652, 40, 200, 70), { Parent = b3 }), GREEN_TOP, GREEN_BOTTOM)
+		robuxPrice(btn, skip.Price, rect(20, 10, 160, 50))
+		bind(btn, function()
+			promptProduct(skip.ProductId)
+		end)
+	end
+
+	local function divider(title)
+		order += 1
+		local holder = create("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(868, 64), LayoutOrder = order,
+			Parent = scroll })
+		create("Frame", {
+			BackgroundColor3 = rgb(95, 100, 125),
+			BorderSizePixel = 0,
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, 20, 0.5, 0),
+			Size = UDim2.fromOffset(828, 3),
+			Parent = holder,
+		})
+		local pill = create("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromOffset(380, 56),
+			BackgroundColor3 = rgb(42, 46, 75),
+			Parent = holder,
+		})
+		create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = pill })
+		create("UIStroke", { Thickness = 3, Color = BLACK, Parent = pill })
+		text(title, merge(rect(24, 7, 332, 42), { Parent = pill }), 3)
+	end
+
+	local function cardRow(h)
+		order += 1
+		local row = create("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(868, h), LayoutOrder = order,
+			Parent = scroll })
+		create("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			Padding = UDim.new(0, 14),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Parent = row,
+		})
+		create("UIPadding", { PaddingTop = UDim.new(0, 10), Parent = row })
+		return row
+	end
+
+	local BADGES = {
+		["Good Value"] = ColorSequence.new(rgb(100, 210, 255), rgb(30, 110, 235)),
+		["Great Value"] = ColorSequence.new(rgb(255, 225, 70), rgb(255, 130, 20)),
+		["Most Value"] = RAINBOW,
+	}
+
+	local function packCard(row, i, pack, top, bottom, emoji, amountText)
+		local card = fancy("Frame", { Name = "Pack" .. i, Size = UDim2.fromOffset(202, 262), LayoutOrder = i, Parent = row },
+			top, bottom)
+		-- light burst
+		local glow = create("Frame", merge(rect(31, 40, 140, 120), { BackgroundColor3 = WHITE, BackgroundTransparency = 0.6,
+			Parent = card }))
+		create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = glow })
+		create("UIGradient", {
+			Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.5, 0.2),
+				NumberSequenceKeypoint.new(1, 1),
+			}),
+			Parent = glow,
+		})
+		icon(nil, merge(rect(16, 46, 170, 106), { Parent = card }), string.rep(emoji, math.min(i, 3)))
+		if pack.Badge then
+			local badge = fancy("Frame", merge(rect(10, -10, 182, 44), { Parent = card }),
+				BADGES[pack.Badge] or BADGES["Good Value"], nil, { Rotation = 0, Corner = 22, Stroke = 3 })
+			text(pack.Badge, merge(rect(10, 5, 162, 34), { Parent = badge }), 3)
+		end
+		local pill = create("Frame", {
+			Position = UDim2.fromOffset(12, 160),
+			Size = UDim2.fromOffset(178, 38),
+			BackgroundColor3 = rgb(25, 30, 45),
+			BackgroundTransparency = 0.3,
+			Parent = card,
+		})
+		create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = pill })
+		text(amountText, merge(rect(8, 3, 162, 32), { Parent = pill }), 3)
+		local btn = fancy("TextButton", merge(rect(12, 204, 178, 50), { Parent = card }), GREEN_TOP, GREEN_BOTTOM)
+		robuxPrice(btn, pack.Price, rect(12, 6, 154, 38))
+		bind(btn, function()
+			promptProduct(pack.ProductId)
+		end)
+	end
+
+	if s.CashPacks and #s.CashPacks > 0 then
+		divider("💵 Cash Packs")
+		local row = cardRow(272)
+		for i, pack in ipairs(s.CashPacks) do
+			packCard(row, i, pack, rgb(130, 255, 110), rgb(25, 165, 50), "💵", "+$" .. abbreviate(pack.Amount))
+		end
+	end
+	if s.SpeedPacks and #s.SpeedPacks > 0 then
+		divider("⚡ Speed Packs")
+		local row = cardRow(272)
+		for i, pack in ipairs(s.SpeedPacks) do
+			packCard(row, i, pack, rgb(255, 220, 70), rgb(255, 125, 20), "⚡", "+" .. abbreviate(pack.Amount) .. " Speed")
+		end
+	end
+
+	-- Gamepasses
+	local passList = {}
+	for key, cfg in pairs(Config.GamePasses) do
+		table.insert(passList, { Key = key, Cfg = cfg })
+	end
+	table.sort(passList, function(a, b)
+		return (a.Cfg.Order or 99) < (b.Cfg.Order or 99)
+	end)
+	local PASS_COLORS = {
+		{ rgb(80, 210, 255), rgb(30, 110, 235) },
+		{ rgb(200, 120, 255), rgb(110, 40, 225) },
+		{ rgb(255, 225, 70), rgb(255, 130, 20) },
+		{ rgb(255, 110, 200), rgb(215, 30, 110) },
+		{ rgb(130, 255, 120), rgb(30, 165, 60) },
+	}
+	local passCards = {}
+	if #passList > 0 then
+		divider("🎟️ Gamepasses")
+		local row
+		for idx, entry in ipairs(passList) do
+			local cfg = entry.Cfg
+			if (idx - 1) % 2 == 0 then
+				row = cardRow(222)
+			end
+			local colors = PASS_COLORS[(idx - 1) % #PASS_COLORS + 1]
+			local card = fancy("Frame", { Name = entry.Key, Size = UDim2.fromOffset(420, 210), LayoutOrder = idx,
+				Parent = row }, colors[1], colors[2], { Rotation = 45 })
+			text(cfg.Name or entry.Key, merge(rect(18, 8, 390, 52), { TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = card }), 4)
+			local circle = create("Frame", merge(rect(18, 66, 124, 124), { BackgroundColor3 = WHITE,
+				BackgroundTransparency = 0.6, Parent = card }))
+			create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = circle })
+			icon(nil, merge(rect(14, 14, 96, 96), { Parent = circle }), cfg.Emoji or "⭐", cfg.Image)
+			text(cfg.Description or "", merge(rect(156, 62, 250, 74), { Parent = card }), 3)
+			local btn = fancy("TextButton", merge(rect(196, 142, 210, 58), { Parent = card }), GREEN_TOP, GREEN_BOTTOM)
+			local price = robuxPrice(btn, cfg.Price, rect(14, 8, 182, 42))
+			local owned = text("OWNED", merge(rect(14, 8, 182, 42), { Visible = false, Parent = btn }), 3)
+			bind(btn, function()
+				if not player:GetAttribute(cfg.Attribute) then
+					promptPass(cfg.GamePassId)
+				end
+			end)
+			passCards[entry.Key] = { Cfg = cfg, Button = btn, Price = price, Owned = owned }
+		end
+	end
+
+	refreshShopPasses = function()
+		for _, c in pairs(passCards) do
+			local has = player:GetAttribute(c.Cfg.Attribute) == true
+			c.Price.Visible = not has
+			c.Owned.Visible = has
+			if has then
+				setGradient(c.Button, rgb(220, 220, 220), rgb(130, 130, 130))
+			end
+		end
+	end
 end
 
 ---------------------------------------------------------------------
@@ -1290,7 +1491,8 @@ end)
 task.spawn(function()
 	while gui.Parent do
 		rebirthText.Text = formatNumber(getStat(S.Rebirths) or 0)
-		moneyText.Text = "$" .. formatNumber(getStat(S.Currency) or 0)
+		moneyText.Text = "$" .. abbreviate(getStat(S.Currency) or 0)
+		speedText.Text = abbreviate(getStat("Speed") or 0) .. " Speed"
 		friendText.Text = "Friend Boost: +" .. tostring(getStat(S.FriendBoost) or 0) .. "%"
 		multText.Text = "x" .. tostring(getStat(S.Multiplier) or 1) .. " Multiplier"
 
@@ -1307,6 +1509,7 @@ task.spawn(function()
 		end
 		refreshRebirth()
 		refreshPasses()
+		refreshShopPasses()
 		task.wait(0.25)
 	end
 end)

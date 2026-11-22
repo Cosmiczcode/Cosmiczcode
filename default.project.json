@@ -8,17 +8,29 @@
       },
       "TreadmillSkins": {
         "$path": "src/ReplicatedStorage/TreadmillSkins.lua"
+      },
+      "TreadmillConfig": {
+        "$path": "src/ReplicatedStorage/TreadmillConfig.lua"
+      },
+      "WorldBuilder": {
+        "$path": "src/ReplicatedStorage/WorldBuilder.lua"
       }
     },
     "ServerScriptService": {
       "SimUIServer": {
         "$path": "src/ServerScriptService/SimUIServer.server.lua"
+      },
+      "TreadmillServer": {
+        "$path": "src/ServerScriptService/TreadmillServer.server.lua"
       }
     },
     "StarterPlayer": {
       "StarterPlayerScripts": {
         "SimUIClient": {
           "$path": "src/StarterPlayerScripts/SimUIClient.client.lua"
+        },
+        "TreadmillClient": {
+          "$path": "src/StarterPlayerScripts/TreadmillClient.client.lua"
         }
       }
     }

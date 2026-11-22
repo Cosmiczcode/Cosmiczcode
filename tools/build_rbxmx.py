@@ -7,6 +7,10 @@ ITEMS = [
     ("LocalScript", "SimUIClient", "src/StarterPlayerScripts/SimUIClient.client.lua", "Move to StarterPlayer > StarterPlayerScripts"),
     ("Script", "SimUIServer", "src/ServerScriptService/SimUIServer.server.lua", "Move to ServerScriptService"),
     ("ModuleScript", "TreadmillSkins", "src/ReplicatedStorage/TreadmillSkins.lua", "Move to ReplicatedStorage"),
+    ("ModuleScript", "TreadmillConfig", "src/ReplicatedStorage/TreadmillConfig.lua", "Move to ReplicatedStorage"),
+    ("ModuleScript", "WorldBuilder", "src/ReplicatedStorage/WorldBuilder.lua", "Move to ReplicatedStorage"),
+    ("Script", "TreadmillServer", "src/ServerScriptService/TreadmillServer.server.lua", "Move to ServerScriptService"),
+    ("LocalScript", "TreadmillClient", "src/StarterPlayerScripts/TreadmillClient.client.lua", "Move to StarterPlayer > StarterPlayerScripts"),
 ]
 
 def item(ref, cls, name, src):
