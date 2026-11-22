@@ -42,3 +42,13 @@ Every HUD button also fires `PlayerGui.SimulatorUI.ButtonClicked` with the butto
 If your game already sets `MarketplaceService.ProcessReceipt`, set `Config.HandleReceipts = false`.
 
 Rebuild the `.rbxmx` after editing `src/`: `python3 tools/build_rbxmx.py`
+
+## Treadmill skins
+`TreadmillSkins` (ModuleScript in ReplicatedStorage) builds 12 themed treadmills from Parts:
+Basic, Jungle, Tech, Hacker, Inferno, Frost, Golden, Alien, Candy, Lucky, Toxic, Ocean.
+
+In Studio's Command Bar:
+```lua
+require(game.ReplicatedStorage.TreadmillSkins).Install()   -- templates + showcase
+require(game.ReplicatedStorage.TreadmillSkins).Swap(workspace.MyTreadmill, "Inferno")  -- reskin one
+```

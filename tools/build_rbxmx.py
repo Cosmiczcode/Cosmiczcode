@@ -6,6 +6,7 @@ ITEMS = [
     ("ModuleScript", "SimUIConfig", "src/ReplicatedStorage/SimUIConfig.lua", "Move to ReplicatedStorage"),
     ("LocalScript", "SimUIClient", "src/StarterPlayerScripts/SimUIClient.client.lua", "Move to StarterPlayer > StarterPlayerScripts"),
     ("Script", "SimUIServer", "src/ServerScriptService/SimUIServer.server.lua", "Move to ServerScriptService"),
+    ("ModuleScript", "TreadmillSkins", "src/ReplicatedStorage/TreadmillSkins.lua", "Move to ReplicatedStorage"),
 ]
 
 def item(ref, cls, name, src):
